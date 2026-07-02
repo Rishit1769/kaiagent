@@ -10,11 +10,22 @@ via stop_audio(). All in-flight playback loops poll it between chunks.
 import asyncio
 import io
 import threading
+import logging
 from typing import Optional
 
 import numpy as np
-import sounddevice as sd
 import av
+
+try:
+    import sounddevice as sd
+except ModuleNotFoundError as exc:
+    sd = None
+    SOUNDDEVICE_IMPORT_ERROR = exc
+else:
+    SOUNDDEVICE_IMPORT_ERROR = None
+
+
+logger = logging.getLogger(__name__)
 
 
 # Single global flag — flipping this stops every active playback in this process
@@ -24,6 +35,8 @@ _stop_event = threading.Event()
 def stop_audio() -> None:
     """Cancel any in-progress playback immediately. Safe to call from any thread."""
     _stop_event.set()
+    if sd is None:
+        return
     try:
         sd.stop()                # boots the underlying PortAudio stream
     except Exception:
@@ -65,7 +78,7 @@ def _blocking_play_chunked(pcm: np.ndarray, sr: int) -> None:
     """Play PCM through an OutputStream, polling _stop_event between blocks
     so cancellation takes effect within ~50 ms instead of 'when the buffer
     runs out'."""
-    if pcm.size == 0:
+    if pcm.size == 0 or sd is None:
         return
 
     block = max(1, int(sr * 0.05))    # 50 ms blocks
@@ -98,6 +111,9 @@ def _blocking_play_chunked(pcm: np.ndarray, sr: int) -> None:
 async def play_mp3_async(mp3_bytes: bytes) -> None:
     """Decode and play MP3 audio asynchronously. Cancellable via stop_audio()."""
     if not mp3_bytes:
+        return
+    if sd is None:
+        logger.warning("Audio playback skipped because sounddevice is unavailable.")
         return
 
     _arm_audio()

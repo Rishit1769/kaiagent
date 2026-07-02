@@ -1,4 +1,4 @@
-import threading
+﻿import threading
 from typing import Callable
 
 import keyboard
@@ -57,8 +57,8 @@ class GlobalHotkeyMonitor:
 class StopHotkey:
     """A global key that cancels the current generation (default: Esc).
 
-    Only fires while Clicky is actively talking/thinking — the callback itself
-    should no-op when Clicky is idle, so this can be left always-on without
+    Only fires while Kai Agent is actively talking/thinking â€” the callback itself
+    should no-op when Kai Agent is idle, so this can be left always-on without
     stealing Esc from other apps' UX.
     """
 
@@ -68,3 +68,4 @@ class StopHotkey:
 
     def start(self):
         keyboard.add_hotkey(self._key, self._on_stop, suppress=False)
+

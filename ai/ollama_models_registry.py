@@ -1,5 +1,5 @@
-"""
-Curated registry of Ollama models recommended for Clicky, plus heuristics
+﻿"""
+Curated registry of Ollama models recommended for Kai Agent, plus heuristics
 for classifying installed models as vision-capable or text-only.
 
 Why curated:
@@ -23,7 +23,7 @@ class OllamaRec:
     blurb: str          # one-line description shown in the menu
 
 
-# ─── Vision models (best for screen-aware queries + grid-pointing) ────────────
+# â”€â”€â”€ Vision models (best for screen-aware queries + grid-pointing) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 RECOMMENDED_VISION: list[OllamaRec] = [
     OllamaRec(
@@ -31,40 +31,40 @@ RECOMMENDED_VISION: list[OllamaRec] = [
         label="Qwen2-VL 7B",
         size="4.5 GB",
         use_for="vision",
-        blurb="Best UI/OCR accuracy — recommended for pointing",
+        blurb="Best UI/OCR accuracy â€” recommended for pointing",
     ),
     OllamaRec(
         name="llama3.2-vision:11b",
         label="Llama 3.2 Vision 11B",
         size="7.9 GB",
         use_for="vision",
-        blurb="Meta's flagship vision model — solid all-rounder",
+        blurb="Meta's flagship vision model â€” solid all-rounder",
     ),
     OllamaRec(
         name="llava:7b",
         label="LLaVA 7B",
         size="4.7 GB",
         use_for="vision",
-        blurb="Lightweight vision fallback — runs on weaker GPUs",
+        blurb="Lightweight vision fallback â€” runs on weaker GPUs",
     ),
     OllamaRec(
         name="minicpm-v",
         label="MiniCPM-V 8B",
         size="5.5 GB",
         use_for="vision",
-        blurb="Tiny + sharp — best for low-RAM laptops",
+        blurb="Tiny + sharp â€” best for low-RAM laptops",
     ),
     OllamaRec(
         name="bakllava",
         label="BakLLaVA 7B",
         size="4.4 GB",
         use_for="vision",
-        blurb="LLaVA fine-tune on Mistral — fast inference",
+        blurb="LLaVA fine-tune on Mistral â€” fast inference",
     ),
 ]
 
 
-# ─── Text models (Code Mode, journal Q&A, no-screenshot replies) ──────────────
+# â”€â”€â”€ Text models (Code Mode, journal Q&A, no-screenshot replies) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 RECOMMENDED_TEXT: list[OllamaRec] = [
     OllamaRec(
@@ -72,14 +72,14 @@ RECOMMENDED_TEXT: list[OllamaRec] = [
         label="Qwen 2.5 Coder 7B",
         size="4.7 GB",
         use_for="text",
-        blurb="Best for Code Mode — strong code reasoning",
+        blurb="Best for Code Mode â€” strong code reasoning",
     ),
     OllamaRec(
         name="llama3.2:3b",
         label="Llama 3.2 3B",
         size="2.0 GB",
         use_for="text",
-        blurb="Fastest text model — great default",
+        blurb="Fastest text model â€” great default",
     ),
     OllamaRec(
         name="mistral:7b",
@@ -98,7 +98,7 @@ RECOMMENDED_TEXT: list[OllamaRec] = [
 ]
 
 
-# ─── Vision capability heuristic ──────────────────────────────────────────────
+# â”€â”€â”€ Vision capability heuristic â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 _VISION_KEYWORDS = (
     "vision", "vl", "llava", "bakllava", "minicpm-v", "moondream",
@@ -118,7 +118,7 @@ def is_vision_capable(model_name: str) -> bool:
     return any(kw in n for kw in _VISION_KEYWORDS)
 
 
-# ─── Pull helper ──────────────────────────────────────────────────────────────
+# â”€â”€â”€ Pull helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async def pull_model(name: str, host: str, on_progress=None) -> bool:
     """Stream `ollama pull <name>` over the HTTP API.
@@ -154,3 +154,4 @@ async def pull_model(name: str, host: str, on_progress=None) -> bool:
                 return True
     except Exception:
         return False
+

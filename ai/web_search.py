@@ -1,5 +1,5 @@
-"""
-Real-time web search for Clicky — tutor-grade grounding layer.
+﻿"""
+Real-time web search for Kai Agent â€” tutor-grade grounding layer.
 
 Strategy (free path, no API key required):
   1. Expand the user's question into 1-2 focused sub-queries.
@@ -34,7 +34,7 @@ OVERALL_CHAR_BUDGET = 5500         # cap on the whole context block
 FETCH_TIMEOUT = 6.0
 
 
-# ── Public API ────────────────────────────────────────────────────────────────
+# â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async def search(query: str, max_results: int = MAX_PAGES) -> str:
     """Return a plain-text, source-cited search context."""
@@ -55,14 +55,14 @@ def build_search_context(results: str) -> str:
     if not results.strip():
         return ""
     return (
-        "\n\n[Web Search Results — ground factual / recent claims in these. "
+        "\n\n[Web Search Results â€” ground factual / recent claims in these. "
         "Cite source numbers like [1] when you use them.]\n"
         + results
         + "\n[End of search results]\n"
     )
 
 
-# ── Tavily (premium path) ─────────────────────────────────────────────────────
+# â”€â”€ Tavily (premium path) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async def _tavily(query: str, max_results: int) -> str:
     url = "https://api.tavily.com/search"
@@ -88,12 +88,12 @@ async def _tavily(query: str, max_results: int) -> str:
         url_str = result.get("url", "")
         body = (result.get("raw_content") or result.get("content") or "").strip()
         body = body[:PAGE_CHAR_BUDGET]
-        parts.append(f"[{i}] {title} — {url_str}\n{body}")
+        parts.append(f"[{i}] {title} â€” {url_str}\n{body}")
 
     return _truncate("\n\n".join(parts), OVERALL_CHAR_BUDGET)
 
 
-# ── Free deep search: DuckDuckGo HTML + page fetch ────────────────────────────
+# â”€â”€ Free deep search: DuckDuckGo HTML + page fetch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async def _free_deep_search(query: str, max_results: int) -> str:
     sub_queries = _expand_query(query)
@@ -135,18 +135,18 @@ async def _free_deep_search(query: str, max_results: int) -> str:
         body = (body or "").strip()[:PAGE_CHAR_BUDGET]
         if not body:
             continue
-        parts.append(f"[{i}] {title} — {url}\n{body}")
+        parts.append(f"[{i}] {title} â€” {url}\n{body}")
 
     return _truncate("\n\n".join(parts), OVERALL_CHAR_BUDGET)
 
 
-# ── Query expansion ───────────────────────────────────────────────────────────
+# â”€â”€ Query expansion â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 _STOPWORDS = {
     "what", "whats", "what's", "how", "why", "when", "where", "who",
     "is", "are", "the", "a", "an", "of", "on", "in", "to", "for",
     "do", "does", "i", "you", "me", "this", "that", "please", "tell",
-    "explain", "clicky", "hey",
+    "explain", "kai agent", "hey",
 }
 
 
@@ -185,7 +185,7 @@ def _expand_query(query: str) -> list[str]:
     return queries[:2]
 
 
-# ── DuckDuckGo HTML scraper ───────────────────────────────────────────────────
+# â”€â”€ DuckDuckGo HTML scraper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 _DDG_URL = "https://html.duckduckgo.com/html/"
 _RESULT_LINK_RE = re.compile(
@@ -199,7 +199,7 @@ async def _ddg_html_search(client: httpx.AsyncClient, query: str) -> list[Tuple[
 
     The previous implementation scraped html.duckduckgo.com directly, which
     DDG now rate-limits / serves with anti-bot 202 stubs. The `ddgs` library
-    rotates endpoints, user agents, and parses the JSON API — it's the
+    rotates endpoints, user agents, and parses the JSON API â€” it's the
     canonical open-source path and is actively maintained.
 
     We run it in a thread because ddgs is sync; the rest of the search
@@ -257,7 +257,7 @@ def _normalize_ddg_url(href: str) -> str:
     return ""
 
 
-# ── Page fetch + text extraction ──────────────────────────────────────────────
+# â”€â”€ Page fetch + text extraction â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 _SCRIPT_STYLE_RE = re.compile(r"<(script|style|noscript)\b[^>]*>.*?</\1>",
                               re.IGNORECASE | re.DOTALL)
@@ -301,4 +301,5 @@ def _html_to_text(html: str) -> str:
 def _truncate(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
-    return text[: limit - 1] + "…"
+    return text[: limit - 1] + "â€¦"
+

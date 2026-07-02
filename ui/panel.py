@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 from enum import Enum, auto
 from typing import Callable, Optional
 
@@ -26,7 +26,7 @@ class AppState(Enum):
 
 
 STATE_LABELS = {
-    AppState.IDLE:      "Say 'Clicky' or Ctrl+Alt+Space",
+    AppState.IDLE:      "Say 'Kai Agent' or Ctrl+Alt+Space",
     AppState.LISTENING: "Listening...",
     AppState.THINKING:  "Thinking...",
     AppState.SPEAKING:  "Speaking...",
@@ -103,7 +103,7 @@ PROVIDER_LABELS = {
 def _copilot_model_choices() -> list[tuple[str, str]]:
     """Returns [(model_id, display_label), ...] for the dropdown.
     Free models first, then ascending multiplier. Display shows '(free)' /
-    '(1×)' so the user always knows what burns premium quota."""
+    '(1Ã—)' so the user always knows what burns premium quota."""
     try:
         from ai.github_copilot_provider import (
             cached_models, sorted_model_ids, model_label,
@@ -134,7 +134,7 @@ class ProviderBadge(QLabel):
 
 
 class CompanionPanel(QWidget):
-    """Floating companion control panel — equivalent to CompanionPanelView.swift."""
+    """Floating companion control panel â€” equivalent to CompanionPanelView.swift."""
 
     on_push_to_talk_pressed  = pyqtSignal()
     on_push_to_talk_released = pyqtSignal()
@@ -150,7 +150,7 @@ class CompanionPanel(QWidget):
         self._setup_window()
         self._build_ui()
         self._position_bottom_right()
-        # Wire internal thread-safe signals → main-thread slots
+        # Wire internal thread-safe signals â†’ main-thread slots
         self._sig_copilot_code.connect(self._on_copilot_code)
         self._sig_copilot_error.connect(self._on_copilot_error)
 
@@ -160,13 +160,14 @@ class CompanionPanel(QWidget):
             | Qt.WindowType.WindowStaysOnTopHint
             | Qt.WindowType.Tool
         )
+        self.setWindowTitle("Kai Agent")
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setFixedSize(PANEL_WIDTH, PANEL_HEIGHT)
         self.setObjectName("panel")
         self.setStyleSheet(PANEL_QSS)
         self.setAcceptDrops(True)   # drag-drop PDFs / DOCX / TXT
 
-    # ── Drag-drop handlers ───────────────────────────────────────────────────
+    # â”€â”€ Drag-drop handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
@@ -185,7 +186,7 @@ class CompanionPanel(QWidget):
 
         # Header
         header = QHBoxLayout()
-        title = QLabel("Clicky")
+        title = QLabel("Kai Agent")
         title.setObjectName("title")
         title.setFont(FONT_TITLE)
         header.addWidget(title)
@@ -194,8 +195,8 @@ class CompanionPanel(QWidget):
         self._badge = ProviderBadge(provider)
         header.addWidget(self._badge)
 
-        # Minimize button — hides the panel back to tray
-        self._min_btn = QPushButton("—")
+        # Minimize button â€” hides the panel back to tray
+        self._min_btn = QPushButton("â€”")
         self._min_btn.setFixedSize(24, 24)
         self._min_btn.setStyleSheet(
             "QPushButton { background: rgba(60,60,75,180); color: rgb(220,220,230);"
@@ -214,7 +215,7 @@ class CompanionPanel(QWidget):
         root.addWidget(div)
 
         # Status row
-        self._status_dot = QLabel("●")
+        self._status_dot = QLabel("â—")
         self._status_dot.setStyleSheet(f"color: rgb({STATE_IDLE.red()},{STATE_IDLE.green()},{STATE_IDLE.blue()}); font-size: 10px;")
         self._status_label = QLabel(STATE_LABELS[AppState.IDLE])
         self._status_label.setObjectName("status")
@@ -245,7 +246,7 @@ class CompanionPanel(QWidget):
         root.addWidget(scroll, stretch=1)
 
         # Push-to-talk button
-        self._ptt_btn = QPushButton("Say 'Clicky' or hold Ctrl+Alt+Space")
+        self._ptt_btn = QPushButton("Say 'Kai Agent' or hold Ctrl+Alt+Space")
         self._ptt_btn.setObjectName("hotkey_btn")
         self._ptt_btn.setFont(FONT_LABEL)
         self._ptt_btn.setFixedHeight(44)
@@ -296,7 +297,7 @@ class CompanionPanel(QWidget):
             self._model_combo.addItem(cfg.ollama_model, userData=cfg.ollama_model)
         self._model_combo.blockSignals(False)
         # Fire once with the new default model id (NOT the display label) so
-        # the manager picks it up — important when label != id.
+        # the manager picks it up â€” important when label != id.
         if self._model_combo.count():
             self.on_model_changed.emit(self._model_combo.currentData() or self._model_combo.currentText())
 
@@ -312,7 +313,7 @@ class CompanionPanel(QWidget):
         y = screen.bottom() - PANEL_HEIGHT - 60
         self.move(x, y)
 
-    # ── Public API ────────────────────────────────────────────────────────────
+    # â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def set_state(self, state: AppState):
         self._state = state
@@ -352,27 +353,27 @@ class CompanionPanel(QWidget):
         """Thread-safe version of showing a Copilot login error."""
         self._sig_copilot_error.emit(error)
 
-    # ── Private slots (always run on Qt main thread) ──────────────────────────
+    # â”€â”€ Private slots (always run on Qt main thread) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _on_copilot_code(self, user_code: str, verification_uri: str):
         self.show()   # bring panel to front
         self.raise_()
         self._response_text = (
-            "── GitHub Copilot Sign-In ──\n\n"
+            "â”€â”€ GitHub Copilot Sign-In â”€â”€\n\n"
             f"1.  Open:  {verification_uri}\n\n"
             f"2.  Enter code:\n\n"
             f"        {user_code}\n\n"
             "3.  Click Authorize in GitHub.\n\n"
-            "Clicky will sign in automatically once you authorize."
+            "Kai Agent will sign in automatically once you authorize."
         )
         self._response_label.setText(self._response_text)
-        self._status_label.setText("Waiting for Copilot authorization…")
+        self._status_label.setText("Waiting for Copilot authorizationâ€¦")
 
     def _on_copilot_error(self, error: str):
         self._response_text = f"Copilot login failed:\n\n{error}"
         self._response_label.setText(self._response_text)
 
-    # ── Mouse drag to reposition ──────────────────────────────────────────────
+    # â”€â”€ Mouse drag to reposition â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self._drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
@@ -381,7 +382,7 @@ class CompanionPanel(QWidget):
         if event.buttons() == Qt.MouseButton.LeftButton and hasattr(self, '_drag_pos'):
             self.move(event.globalPosition().toPoint() - self._drag_pos)
 
-    # ── Painting: rounded glass background ───────────────────────────────────
+    # â”€â”€ Painting: rounded glass background â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -389,3 +390,4 @@ class CompanionPanel(QWidget):
         painter.setPen(QPen(QColor(60, 60, 75, 180), 1))
         painter.drawRoundedRect(self.rect(), PANEL_RADIUS, PANEL_RADIUS)
         painter.end()
+

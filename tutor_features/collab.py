@@ -1,27 +1,27 @@
-"""
-Live collaboration — share a Clicky session with a friend over WebRTC.
+﻿"""
+Live collaboration â€” share a Kai Agent session with a friend over WebRTC.
 
 Status: SKELETON. The mechanism is laid out, but a working build needs:
   1. A signalling server (WebSocket relay so peers can find each other)
-     — easiest free option: PeerJS Cloud or a 50-line Cloudflare Worker.
+     â€” easiest free option: PeerJS Cloud or a 50-line Cloudflare Worker.
   2. Implement the data-channel send/recv loop using `aiortc`.
   3. Wire CompanionManager.sig_response_chunk + sig_point_at to broadcast,
      and consume incoming messages on the receiver side.
 
 Why it's a skeleton: WebRTC + NAT traversal + state sync needs careful
-testing across two machines on different networks — we can't validate that
+testing across two machines on different networks â€” we can't validate that
 in a single coding session. Ship this when you have time to iterate.
 
 How users would use it once finished:
-    ┌─ HOST ─────────────────────────┐    ┌─ FRIEND ──────────────────────┐
-    │ Tray → Live Session → Start    │    │ Tray → Live Session → Join    │
-    │ Tray shows code:  BLU-X4F      │    │ Pop-up: "Enter code:"         │
-    │ Friend clicks Join              │    │ Types  BLU-X4F                │
-    │ Both Clickys now share:         │    │ Both Clickys now share:       │
-    │   • LLM responses               │    │   • LLM responses             │
-    │   • Pointer coordinates         │    │   • Pointer coordinates       │
-    │   • Q&A history                 │    │   • Q&A history               │
-    └────────────────────────────────┘    └────────────────────────────────┘
+    â”Œâ”€ HOST â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”    â”Œâ”€ FRIEND â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+    â”‚ Tray â†’ Live Session â†’ Start    â”‚    â”‚ Tray â†’ Live Session â†’ Join    â”‚
+    â”‚ Tray shows code:  BLU-X4F      â”‚    â”‚ Pop-up: "Enter code:"         â”‚
+    â”‚ Friend clicks Join              â”‚    â”‚ Types  BLU-X4F                â”‚
+    â”‚ Both Kai Agents now share:         â”‚    â”‚ Both Kai Agents now share:       â”‚
+    â”‚   â€¢ LLM responses               â”‚    â”‚   â€¢ LLM responses             â”‚
+    â”‚   â€¢ Pointer coordinates         â”‚    â”‚   â€¢ Pointer coordinates       â”‚
+    â”‚   â€¢ Q&A history                 â”‚    â”‚   â€¢ Q&A history               â”‚
+    â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜    â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ class CollabSession:
     just generates a code and logs that the session would have started.
     """
 
-    SIGNALLING_URL = "wss://clicky-signal.example/v1"   # TODO: stand up server
+    SIGNALLING_URL = "wss://kai-agent-signal.example/v1"   # TODO: stand up server
 
     def __init__(self):
         self.code: Optional[str] = None
@@ -97,3 +97,4 @@ class CollabSession:
     def on_message(self, callback: Callable[[dict], None]) -> None:
         """Register a callback for incoming messages from peers."""
         self._on_message = callback
+

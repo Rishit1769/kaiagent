@@ -1,15 +1,15 @@
-"""
+﻿"""
 Ollama bootstrap utilities.
 
-Most users who hit "Clicky listens but won't answer" don't have Ollama
+Most users who hit "Kai Agent listens but won't answer" don't have Ollama
 installed (or installed it without pulling a model). This module:
 
-  • Detects whether Ollama is running     → is_ollama_running()
-  • Lists installed models                → list_installed_models()
-  • Detects whether a model is pulled     → is_model_installed(name)
-  • Streams a pull with a progress cb    → pull_model(name, on_progress)
-  • Downloads the official Ollama setup   → download_ollama_installer(dest)
-  • Launches the official Ollama setup    → run_ollama_installer(path)
+  â€¢ Detects whether Ollama is running     â†’ is_ollama_running()
+  â€¢ Lists installed models                â†’ list_installed_models()
+  â€¢ Detects whether a model is pulled     â†’ is_model_installed(name)
+  â€¢ Streams a pull with a progress cb    â†’ pull_model(name, on_progress)
+  â€¢ Downloads the official Ollama setup   â†’ download_ollama_installer(dest)
+  â€¢ Launches the official Ollama setup    â†’ run_ollama_installer(path)
 
 Everything is sync httpx so it's safe to call from any thread.
 """
@@ -38,7 +38,7 @@ DEFAULT_TEXT_MODEL = "llama3.2:3b"          # ~2 GB
 DEFAULT_VISION_MODEL = "qwen2.5vl:3b"        # ~3 GB
 
 
-# ─── Detection ────────────────────────────────────────────────────────────────
+# â”€â”€â”€ Detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def is_ollama_running(timeout: float = 1.5) -> bool:
     """Return True if the Ollama HTTP server is reachable."""
@@ -80,7 +80,7 @@ def is_model_installed(name: str) -> bool:
     return any(m.split(":", 1)[0] == base for m in installed)
 
 
-# ─── Pull a model with progress ───────────────────────────────────────────────
+# â”€â”€â”€ Pull a model with progress â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def pull_model(
     name: str,
@@ -92,7 +92,7 @@ def pull_model(
 
     on_progress(status, percent) is called as the pull progresses.
         status:  human-readable string (e.g. "downloading manifest")
-        percent: 0.0–100.0 (or 0.0 if unknown)
+        percent: 0.0â€“100.0 (or 0.0 if unknown)
 
     Returns True when the pull finishes successfully.
     """
@@ -137,11 +137,11 @@ def pull_model(
         return False
 
 
-# ─── Installer download / run ─────────────────────────────────────────────────
+# â”€â”€â”€ Installer download / run â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _default_installer_path() -> Path:
     base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    d = Path(base) / "Clicky" / "downloads"
+    d = Path(base) / "Kai Agent" / "downloads"
     d.mkdir(parents=True, exist_ok=True)
     return d / "OllamaSetup.exe"
 
@@ -196,7 +196,7 @@ def wait_for_ollama_server(timeout: float = 60.0, poll_interval: float = 1.0) ->
     return False
 
 
-# ─── CLI usage: `python -m ai.ollama_bootstrap status|install|pull <model>` ───
+# â”€â”€â”€ CLI usage: `python -m ai.ollama_bootstrap status|install|pull <model>` â”€â”€â”€
 
 def _cli():
     args = sys.argv[1:]
@@ -213,17 +213,17 @@ def _cli():
             models = list_installed_models()
             print(f"Installed models ({len(models)}):")
             for m in models:
-                print(f"  • {m}")
+                print(f"  â€¢ {m}")
         return
 
     if cmd == "install":
-        print("Downloading Ollama installer…")
+        print("Downloading Ollama installerâ€¦")
         p = download_ollama_installer(on_progress=lambda pct: print(f"  {pct:.0f}%", end="\r"))
         print(f"\nDownloaded to {p}")
-        print("Launching installer (you'll see a UAC prompt)…")
+        print("Launching installer (you'll see a UAC prompt)â€¦")
         rc = run_ollama_installer(p)
         print(f"Installer exited with code {rc}")
-        print("Waiting for Ollama to come online…")
+        print("Waiting for Ollama to come onlineâ€¦")
         if wait_for_ollama_server(timeout=60):
             print("Ollama is running.")
         else:
@@ -235,14 +235,14 @@ def _cli():
             print("pull needs a model name, e.g.:  python -m ai.ollama_bootstrap pull llama3.2:3b")
             return
         name = args[1]
-        print(f"Pulling {name}…")
+        print(f"Pulling {name}â€¦")
         ok = pull_model(name, on_progress=lambda s, p: print(f"  {s} {p:.0f}%", end="\r"))
         print()
         print("Done." if ok else "Pull failed.")
         return
 
     if cmd == "diag":
-        print("─── Clicky Ollama diagnostics ───")
+        print("â”€â”€â”€ Kai Agent Ollama diagnostics â”€â”€â”€")
         print(f"Configured host:          {cfg.ollama_host}")
         print(f"Configured text model:    {cfg.ollama_text_model}")
         print(f"Configured vision model:  {cfg.ollama_vision_model}")
@@ -260,3 +260,4 @@ def _cli():
 
 if __name__ == "__main__":
     _cli()
+

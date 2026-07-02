@@ -1,5 +1,5 @@
-"""
-Clicky for Windows — Entry Point.
+﻿"""
+Kai Agent for Windows â€” Entry Point.
 Boots Qt, spawns overlay+panel+tray, starts ambient mic listener, binds hotkey.
 """
 
@@ -34,23 +34,23 @@ def _copilot_login_flow(tray, panel, manager):
     from ai.github_copilot_provider import device_login
 
     def _on_code(user_code: str, verification_uri: str):
-        """Called as soon as the device code arrives — display it in the panel."""
+        """Called as soon as the device code arrives â€” display it in the panel."""
         msg = (
             f"GitHub Copilot Sign-In\n\n"
             f"1. Visit: {verification_uri}\n"
             f"2. Enter code:  {user_code}\n"
-            f"3. Click Authorize — Clicky will sign in automatically."
+            f"3. Click Authorize â€” Kai Agent will sign in automatically."
         )
         # Show in panel (cross-thread safe via Qt signal)
         panel.show_copilot_code(user_code, verification_uri)
-        tray.show_notification("GitHub Copilot — enter this code", user_code)
+        tray.show_notification("GitHub Copilot â€” enter this code", user_code)
 
     def _worker():
         try:
             asyncio.run(device_login(on_code=_on_code))
             tray.show_notification(
                 "GitHub Copilot",
-                "Signed in! Refreshing model list…"
+                "Signed in! Refreshing model listâ€¦"
             )
             manager.refresh_copilot_models()
         except Exception as e:
@@ -66,18 +66,18 @@ def main():
     )
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
-    app.setApplicationName("Clicky")
-    app.setApplicationDisplayName("Clicky - AI Companion")
+    app.setApplicationName("Kai Agent")
+    app.setApplicationDisplayName("Kai Agent")
 
-    # ── Core components ───────────────────────────────────────────────────────
+    # â”€â”€ Core components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     manager = CompanionManager()
     panel   = CompanionPanel()
     overlay = CursorOverlay()
     tray    = TrayManager()
 
-    # ── Wire signals ──────────────────────────────────────────────────────────
+    # â”€â”€ Wire signals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-    # State changes → Panel + Tray + Cursor
+    # State changes â†’ Panel + Tray + Cursor
     def _on_state(state: AppState):
         panel.set_state(state)
         tray.set_state_icon(state.name.lower())
@@ -88,7 +88,7 @@ def main():
     # Response streaming
     manager.sig_response_chunk.connect(panel.append_response_chunk)
 
-    # Audio level → cursor waveform (+ panel meter)
+    # Audio level â†’ cursor waveform (+ panel meter)
     manager.sig_audio_level.connect(panel.set_audio_level)
     manager.sig_audio_level.connect(overlay.set_audio_level)
 
@@ -105,22 +105,22 @@ def main():
 
     # Errors
     manager.sig_error.connect(
-        lambda e: tray.show_notification("Clicky error", str(e))
+        lambda e: tray.show_notification("Kai Agent error", str(e))
     )
 
-    # Panel → Manager
+    # Panel â†’ Manager
     panel.on_model_changed.connect(manager.set_model)
 
     def _on_doc_dropped(path: str):
         ok = manager.attach_document(path)
         tray.show_notification(
             "Document Attached" if ok else "Attach failed",
-            f"{path}\nAsk Clicky about it now." if ok else
+            f"{path}\nAsk Kai Agent about it now." if ok else
             "Couldn't read that file."
         )
     panel.on_document_dropped.connect(_on_doc_dropped)
 
-    # Tray → UI / Manager
+    # Tray â†’ UI / Manager
     tray.on_show_panel.connect(panel.show)
     tray.on_hide_panel.connect(panel.hide)
     tray.on_toggle_search.connect(manager.set_web_search)
@@ -140,7 +140,7 @@ def main():
         tray.show_notification(
             "Lesson Recording",
             f"Recording to:\n{out}" if out else
-            "Failed — install imageio[ffmpeg]: pip install imageio imageio-ffmpeg"
+            "Failed â€” install imageio[ffmpeg]: pip install imageio imageio-ffmpeg"
         )
     def _record_stop():
         out = manager.stop_recording()
@@ -165,7 +165,7 @@ def main():
         if summary:
             tray.show_notification(
                 "Workflow Captured",
-                "Sent to Clicky as context. Ask: 'what did I just do?'"
+                "Sent to Kai Agent as context. Ask: 'what did I just do?'"
             )
             # Stash as an attached doc so the next question sees it
             manager._attached_docs.append(("recorded_workflow.txt", summary))
@@ -186,25 +186,25 @@ def main():
     def _open_journal():
         import os, subprocess
         base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-        path = os.path.join(base, "Clicky")
+        path = os.path.join(base, "Kai Agent")
         try:
             os.startfile(path)
         except Exception:
             subprocess.Popen(["explorer", path])
     tray.on_journal_open.connect(_open_journal)
 
-    # Attach document (drag-drop alternative — file picker)
+    # Attach document (drag-drop alternative â€” file picker)
     def _attach_doc():
         from PyQt6.QtWidgets import QFileDialog
         path, _ = QFileDialog.getOpenFileName(
-            None, "Attach a document for Clicky",
+            None, "Attach a document for Kai Agent",
             "", "Documents (*.pdf *.docx *.txt *.md *.csv)"
         )
         if path:
             ok = manager.attach_document(path)
             tray.show_notification(
                 "Document Attached",
-                f"{path}\nAsk Clicky about it now." if ok else
+                f"{path}\nAsk Kai Agent about it now." if ok else
                 "Couldn't read that file."
             )
     tray.on_attach_doc.connect(_attach_doc)
@@ -213,7 +213,7 @@ def main():
         manager.set_active_provider(name)
         panel.refresh_for_provider(name)       # repopulate model dropdown + badge
         tray.rebuild_menu()                    # tick mark moves to new provider
-        tray.show_notification("Clicky", f"Switched to {name}")
+        tray.show_notification("Kai Agent", f"Switched to {name}")
 
     tray.on_switch_provider.connect(_switch)
     tray.on_stop.connect(manager.stop)
@@ -238,7 +238,7 @@ def main():
             panel.refresh_for_provider(provider)
     manager.sig_models_refreshed.connect(_on_models_refreshed)
 
-    # ── Ollama multi-model wiring ─────────────────────────────────────────
+    # â”€â”€ Ollama multi-model wiring â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     tray.on_ollama_set_model.connect(manager.set_ollama_model)
     tray.on_ollama_pull.connect(manager.pull_ollama_model)
     tray.on_ollama_refresh.connect(manager.refresh_ollama_models)
@@ -268,19 +268,19 @@ def main():
         import datetime, json, platform, traceback
         from ai import ollama_bootstrap as ob
         base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-        out = Path(base) / "Clicky" / f"diagnostics-{datetime.datetime.now():%Y%m%d-%H%M%S}.txt"
+        out = Path(base) / "Kai Agent" / f"diagnostics-{datetime.datetime.now():%Y%m%d-%H%M%S}.txt"
         try:
             providers_d = cfg.describe()
         except Exception:
             providers_d = {}
         report = []
-        report.append(f"Clicky diagnostics — {datetime.datetime.now().isoformat()}")
+        report.append(f"Kai Agent diagnostics â€” {datetime.datetime.now().isoformat()}")
         report.append(f"Python: {sys.version.split()[0]}")
         report.append(f"Platform: {platform.platform()}")
         report.append(f"Active LLM: {providers_d.get('llm', '?')}")
         report.append(f"STT: {providers_d.get('stt', '?')}  TTS: {providers_d.get('tts', '?')}")
         report.append("")
-        report.append("─── Ollama ───")
+        report.append("â”€â”€â”€ Ollama â”€â”€â”€")
         try:
             report.append(f"Host: {cfg.ollama_host}")
             report.append(f"Text model:   {cfg.ollama_text_model}")
@@ -292,7 +292,7 @@ def main():
         except Exception:
             report.append(traceback.format_exc())
         report.append("")
-        report.append("─── GitHub Copilot ───")
+        report.append("â”€â”€â”€ GitHub Copilot â”€â”€â”€")
         try:
             from ai.github_copilot_provider import is_authenticated, _token_path
             report.append(f"Token file: {_token_path()}  exists={_token_path().exists()}")
@@ -312,7 +312,7 @@ def main():
 
     tray.on_quit.connect(lambda: (manager.shutdown(), app.quit()))
 
-    # ── Global hotkey ─────────────────────────────────────────────────────────
+    # â”€â”€ Global hotkey â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     hotkey = GlobalHotkeyMonitor(
         on_press=manager.on_hotkey_press,
         on_release=manager.on_hotkey_release,
@@ -323,25 +323,25 @@ def main():
     stop_key = StopHotkey(on_stop=manager.stop, key="esc")
     stop_key.start()
 
-    # ── Show UI + start listener ──────────────────────────────────────────────
+    # â”€â”€ Show UI + start listener â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     overlay.show()        # persistent overlay (cursor follow)
-    # Panel is hidden by default — user can open it from the tray menu if needed
+    # Panel is hidden by default â€” user can open it from the tray menu if needed
     manager.start()        # begin ambient mic + wake-word scanning
 
     providers = cfg.describe()
     tray.show_notification(
-        "Clicky is running",
-        f"Say 'Clicky' or hold {cfg.hotkey}  |  LLM: {providers['llm']}",
+        "Kai Agent is running",
+        f"Say 'Kai Agent' or hold {cfg.hotkey}  |  LLM: {providers['llm']}",
     )
 
-    # ── First-run setup wizard ────────────────────────────────────────────────
+    # â”€â”€ First-run setup wizard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # Show the Ollama install / model pull walkthrough on the first launch.
     # If everything is already wired up, the helper is a no-op.
     try:
         from ui.setup_wizard import maybe_show_setup_wizard, SetupWizard
 
         # Force-show via env var (handy for testing).
-        if os.environ.get("CLICKY_FORCE_SETUP", "").strip() in ("1", "true", "yes"):
+        if os.environ.get("KAI_AGENT_FORCE_SETUP", "").strip() in ("1", "true", "yes"):
             wiz = SetupWizard()
             wiz.show()
             _setup_keepalive[0] = wiz
@@ -362,3 +362,4 @@ _setup_keepalive: list = [None]
 
 if __name__ == "__main__":
     main()
+

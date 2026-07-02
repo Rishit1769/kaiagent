@@ -1,9 +1,9 @@
-"""
-Central state machine for Clicky Windows.
+﻿"""
+Central state machine for Kai Agent Windows.
 
 Orchestrates:
-  hotkey / wake-word → ambient listener capture → STT → screen capture
-  → web search → (optional Claude Computer Use pointing) → LLM → TTS
+  hotkey / wake-word â†’ ambient listener capture â†’ STT â†’ screen capture
+  â†’ web search â†’ (optional Claude Computer Use pointing) â†’ LLM â†’ TTS
 """
 
 import asyncio
@@ -46,7 +46,7 @@ def _ensure_ollama_running():
         except Exception:
             pass
 
-    # Not responding — launch it detached so it survives the Python process
+    # Not responding â€” launch it detached so it survives the Python process
     try:
         subprocess.Popen(
             ["ollama", "serve"],
@@ -84,7 +84,7 @@ def _build_system_prompt(
     if detected_coord:
         x, y, label = detected_coord
         ctx_lines.append(
-            f"DETECTED ELEMENT (pre-computed by the pointing engine — use "
+            f"DETECTED ELEMENT (pre-computed by the pointing engine â€” use "
             f"this coordinate verbatim): x={x}, y={y}, label='{label}'."
         )
     if total_steps > 1:
@@ -93,44 +93,44 @@ def _build_system_prompt(
             "Explain ONLY this step, then end with \"Say 'next' when ready.\""
         )
 
-    # ── Quiz mode: dominant prompt that completely replaces normal behaviour ──
+    # â”€â”€ Quiz mode: dominant prompt that completely replaces normal behaviour â”€â”€
     if quiz_mode:
-        return f"""You are Clicky, an interactive QUIZ TUTOR. The user has
+        return f"""You are Kai Agent, an interactive QUIZ TUTOR. The user has
 turned on Quiz Mode and wants to be tested, NOT explained to.
 
 {chr(10).join(ctx_lines)}
 
 ABSOLUTE QUIZ RULES (override everything else):
-  • NEVER answer the user's question directly. NEVER point at UI elements.
+  â€¢ NEVER answer the user's question directly. NEVER point at UI elements.
     NEVER emit [POINT:...] tags. NEVER explain how things work.
-  • If the user is greeting / starting ("hello", "what's on my screen", "begin",
+  â€¢ If the user is greeting / starting ("hello", "what's on my screen", "begin",
     "quiz me", anything), START the quiz: ask ONE short, specific question
-    about what's visible on screen — name a button, recognise an icon, predict
+    about what's visible on screen â€” name a button, recognise an icon, predict
     what a click would do, identify the active app, etc.
-  • If the user's last message looks like an ANSWER (a noun, a short phrase, a
-    yes/no), evaluate it in ≤1 sentence ("Correct!" / "Close — actually..."),
+  â€¢ If the user's last message looks like an ANSWER (a noun, a short phrase, a
+    yes/no), evaluate it in â‰¤1 sentence ("Correct!" / "Close â€” actually..."),
     then immediately ask the NEXT question.
-  • Questions should be progressively harder. Vary topic across UI literacy,
+  â€¢ Questions should be progressively harder. Vary topic across UI literacy,
     keyboard shortcuts, what's currently visible, predicting outcomes.
-  • Keep it warm and encouraging. Never lecture.
-  • Format every turn as:  <one-line evaluation if applicable>  <one question>
+  â€¢ Keep it warm and encouraging. Never lecture.
+  â€¢ Format every turn as:  <one-line evaluation if applicable>  <one question>
 
 STYLE: short, friendly, never more than 2 sentences. End every turn with a
 question mark."""
 
-    return f"""You are Clicky, a VISUAL AI tutor running on Windows. You live
+    return f"""You are Kai Agent, a VISUAL AI tutor running on Windows. You live
 next to the user's cursor. Your job is to *show*, not just tell.
 
 {chr(10).join(ctx_lines)}
 
 HARD RULES (never break):
   1. LOCATE QUESTIONS ("where is X", "how do I click Y", "show me X", "find X"):
-     • If a DETECTED ELEMENT coordinate is provided above, emit EXACTLY ONE tag
+     â€¢ If a DETECTED ELEMENT coordinate is provided above, emit EXACTLY ONE tag
        [POINT:x,y:label:screen1]  using those coordinates and a 1-3 word label.
        Follow with ONE sentence explaining what it is. Nothing else.
-     • If no coordinate is provided AND you can see the element in the screenshot,
+     â€¢ If no coordinate is provided AND you can see the element in the screenshot,
        emit [POINT:x,y:label:screen1] at your best-guess pixel coordinates.
-     • If the element is NOT visible, say plainly: "I don't see X on this page —
+     â€¢ If the element is NOT visible, say plainly: "I don't see X on this page â€”
        you're looking at [describe actual page]. Want me to help you get there?"
        DO NOT invent generic directions like "click the search bar at the top".
 
@@ -143,20 +143,20 @@ HARD RULES (never break):
      the screen shows Google, tell them so.
 
   4. WEB SEARCH: when [Web Search Results] appear in the system prompt, you MUST
-     use them as your primary source. Give a DIRECT, SPECIFIC answer — never say
+     use them as your primary source. Give a DIRECT, SPECIFIC answer â€” never say
      "I don't know" or list vague options if the results contain real names,
      rankings, or facts. Commit to what the search found. Cite like [1], [2].
-     Today is {today}. Your training data is stale — always prefer search results
+     Today is {today}. Your training data is stale â€” always prefer search results
      over your own memory for anything recent (news, rankings, current events,
      "who is", "what is the best", "latest", "top", etc.).
 
   5. PUBLIC figures, celebrities, YouTubers, athletes, politicians, companies,
-     products, brands — ANSWER FREELY using your training data + search results.
+     products, brands â€” ANSWER FREELY using your training data + search results.
      NEVER refuse with "I can't identify people" / "I can't help with that" /
      "personal or sensitive". The user is asking a tutor question, not running
-     facial recognition — these are public figures with public Wikipedia pages.
-     If asked "who is MrBeast" — say "MrBeast (Jimmy Donaldson) is an American
-     YouTuber known for…". Same for any other public person.
+     facial recognition â€” these are public figures with public Wikipedia pages.
+     If asked "who is MrBeast" â€” say "MrBeast (Jimmy Donaldson) is an American
+     YouTuber known forâ€¦". Same for any other public person.
 
   6. ANNOTATE for emphasis: when teaching where multiple things matter, you
      MAY emit annotation tags (in addition to one POINT tag):
@@ -164,7 +164,7 @@ HARD RULES (never break):
        [CIRCLE:x,y,r:label]            ring around an area
        [UNDERLINE:x,y,width]           underline a word
        [LABEL:x,y:short text]          floating caption
-     Use sparingly — at most 2 annotations per response.
+     Use sparingly â€” at most 2 annotations per response.
 
 STYLE: warm, concise, teacher-y. 1-2 sentences per step. No markdown bullets
 unless genuinely listing options.{_code_addendum(code_active)}{_lang_addendum(language_code)}{extra}"""
@@ -184,7 +184,7 @@ def _lang_addendum(code: str) -> str:
 
 def _guess_label(transcript: str) -> str:
     """Extract a 1-3 word label from a locate query for the speech bubble.
-       'where is the search bar' → 'search bar' """
+       'where is the search bar' â†’ 'search bar' """
     t = transcript.lower().strip().rstrip("?.!")
     for kw in ("where is the ", "where's the ", "show me the ",
               "find the ", "locate the ", "click the ", "click on the ",
@@ -209,11 +209,11 @@ def _split_steps(text: str) -> list[str]:
 
 
 POINT_RE = re.compile(r'\[POINT:(\d+),(\d+):([^:\]]+):screen(\d+)\]')
-# A partial "[POINT..." prefix that hasn't closed yet — hold it back from display
+# A partial "[POINT..." prefix that hasn't closed yet â€” hold it back from display
 # until the next chunk so we never leak a half tag.
 POINT_PARTIAL_RE = re.compile(r'\[(?:P|PO|POI|POIN|POINT|POINT:[^\]]*)?$')
 
-# Whiteboard annotation tags — same idea as POINT, parsed and stripped.
+# Whiteboard annotation tags â€” same idea as POINT, parsed and stripped.
 ARROW_RE     = re.compile(r'\[ARROW:(\d+),(\d+)->(\d+),(\d+)\]')
 CIRCLE_RE    = re.compile(r'\[CIRCLE:(\d+),(\d+),(\d+):([^\]]+)\]')
 UNDERLINE_RE = re.compile(r'\[UNDERLINE:(\d+),(\d+),(\d+)\]')
@@ -223,7 +223,7 @@ ANY_TAG_RE   = re.compile(
 )
 ANY_PARTIAL_RE = re.compile(r'\[[A-Z]{0,9}(?::[^\]]*)?$')
 
-# Questions that ask Clicky to locate / click UI elements — triggers the
+# Questions that ask Kai Agent to locate / click UI elements â€” triggers the
 # Computer Use element locator when Claude is the provider.
 POINT_TRIGGER_RE = re.compile(
     r"\b(where\s+(is|do|can)|how\s+do\s+i\s+(click|find|open|access|use)|"
@@ -240,7 +240,7 @@ class CompanionManager(QObject):
     sig_response_done       = pyqtSignal(str)
     sig_audio_level         = pyqtSignal(float)
     sig_point_at            = pyqtSignal(float, float, str)
-    sig_point_hold          = pyqtSignal(bool)            # True → dwell forever until release
+    sig_point_hold          = pyqtSignal(bool)            # True â†’ dwell forever until release
     sig_point_release       = pyqtSignal()                # end dwell + fly buddy back
     sig_error               = pyqtSignal(str)
     sig_copilot_models_done = pyqtSignal(int)             # arg = model count
@@ -266,7 +266,7 @@ class CompanionManager(QObject):
         self._stt = None
         self._tts = None
 
-        # Current in-flight generation — tracked so Esc / stop can cancel
+        # Current in-flight generation â€” tracked so Esc / stop can cancel
         self._current_task: Optional[asyncio.Future] = None
         self._cancel_flag = False
 
@@ -291,7 +291,7 @@ class CompanionManager(QObject):
         self._collab: Optional[collab.CollabSession] = None
         self._workflow: Optional[workflow_capture.WorkflowCapture] = None
 
-        # Load user-created skills from skills/ + ~/.clicky/skills/
+        # Load user-created skills from skills/ + ~/.kai_agent/skills/
         try:
             skills_pkg.load_all()
         except Exception:
@@ -307,14 +307,14 @@ class CompanionManager(QObject):
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
 
-    # ── Lifecycle ─────────────────────────────────────────────────────────────
+    # â”€â”€ Lifecycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def start(self):
         try:
             self._listener.start()
         except Exception as e:
             self.sig_error.emit(f"Mic error: {e}")
-        # Sleep/wake watchdog — restarts mic + loop after system resume
+        # Sleep/wake watchdog â€” restarts mic + loop after system resume
         self._start_sleep_watchdog()
         # On startup, refresh any stale model cache in the background.
         # 30-day TTL means this is a once-a-month no-op for most launches.
@@ -328,7 +328,7 @@ class CompanionManager(QObject):
                 if count > 0:
                     self.sig_models_refreshed.emit(prov, count)
         except Exception:
-            pass   # silent — not user-facing on startup
+            pass   # silent â€” not user-facing on startup
 
     def shutdown(self):
         # Kill any audio that was playing when the user clicked Quit
@@ -346,7 +346,7 @@ class CompanionManager(QObject):
         asyncio.set_event_loop(self._loop)
         self._loop.run_forever()
 
-    # ── Sleep/wake watchdog ───────────────────────────────────────────────────
+    # â”€â”€ Sleep/wake watchdog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _start_sleep_watchdog(self):
         """Background thread that detects system resume after sleep/hibernate
@@ -361,7 +361,7 @@ class CompanionManager(QObject):
                 drift = now - last_tick - HEARTBEAT
                 last_tick = now
                 if drift > DRIFT_THRESHOLD:
-                    # System was sleeping — restart subsystems
+                    # System was sleeping â€” restart subsystems
                     self._on_system_resume()
 
         t = threading.Thread(target=_watch, daemon=True)
@@ -393,7 +393,7 @@ class CompanionManager(QObject):
         if self._loop:
             asyncio.run_coroutine_threadsafe(coro, self._loop)
 
-    # ── Provider lazy init ────────────────────────────────────────────────────
+    # â”€â”€ Provider lazy init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _get_llm(self) -> BaseLLMProvider:
         if self._llm is None:
@@ -430,7 +430,7 @@ class CompanionManager(QObject):
                     from audio.stt.whisper_cpp_stt import WhisperCppSTT
                     self._stt = WhisperCppSTT()
                 except ImportError:
-                    # pywhispercpp missing → fall back silently
+                    # pywhispercpp missing â†’ fall back silently
                     from audio.stt.faster_whisper_stt import FasterWhisperSTT
                     self._stt = FasterWhisperSTT()
             else:
@@ -452,7 +452,7 @@ class CompanionManager(QObject):
                 self._tts = EdgeTTSProvider()
         return self._tts
 
-    # ── Input sources ─────────────────────────────────────────────────────────
+    # â”€â”€ Input sources â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def on_hotkey_press(self):
         if self._state != AppState.IDLE:
@@ -476,7 +476,7 @@ class CompanionManager(QObject):
         except Exception:
             pass   # never crash the sounddevice audio thread
 
-    # ── Capture flow ──────────────────────────────────────────────────────────
+    # â”€â”€ Capture flow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _begin_capture(self):
         self._listener.start_recording()
@@ -495,7 +495,7 @@ class CompanionManager(QObject):
 
     async def _end_capture_and_process(self):
         pcm = self._listener.stop_recording()
-        if len(pcm) < 3200:  # < 0.1s of audio — ignore
+        if len(pcm) < 3200:  # < 0.1s of audio â€” ignore
             self._emit_state(AppState.IDLE)
             return
 
@@ -509,7 +509,7 @@ class CompanionManager(QObject):
                 self._emit_state(AppState.IDLE)
                 return
 
-            # ── Voice commands — short-circuit before LLM ──
+            # â”€â”€ Voice commands â€” short-circuit before LLM â”€â”€
             if is_stop(transcript):
                 self.stop()
                 return
@@ -521,7 +521,7 @@ class CompanionManager(QObject):
                 await self._advance_lesson_step(ak)
                 return
 
-            # "say it again" — replay the last response without a new LLM call
+            # "say it again" â€” replay the last response without a new LLM call
             if is_repeat(transcript) and self._last_response:
                 self.sig_response_chunk.emit(self._last_response)
                 self.sig_response_done.emit(self._last_response)
@@ -533,7 +533,7 @@ class CompanionManager(QObject):
                 self._emit_state(AppState.IDLE)
                 return
 
-            # Journal voice queries — answered locally, no LLM call needed
+            # Journal voice queries â€” answered locally, no LLM call needed
             if is_journal_today(transcript):
                 msg = journal.summarise(journal.entries_today(),
                                         "Here's what you asked about today:\n")
@@ -559,7 +559,7 @@ class CompanionManager(QObject):
             except Exception as e:
                 self.sig_error.emit(f"Skill error: {e}")
 
-            # 2. Screen capture — skipped if sensitive window (password manager etc.)
+            # 2. Screen capture â€” skipped if sensitive window (password manager etc.)
             #
             # ALSO skipped for "who is X" / "tell me about X" identity questions:
             # OpenAI + Claude refuse to identify people in screenshots even when
@@ -580,9 +580,9 @@ class CompanionManager(QObject):
             # 3. Parallel side-work: web search + element locator
             #
             # Pointing now works for EVERY provider:
-            #   • If ANTHROPIC_API_KEY is set → use Claude Computer Use
+            #   â€¢ If ANTHROPIC_API_KEY is set â†’ use Claude Computer Use
             #     (~5px accuracy, gold standard).
-            #   • Otherwise → universal grid-based locator with the active
+            #   â€¢ Otherwise â†’ universal grid-based locator with the active
             #     vision LLM (Copilot GPT-4o, OpenAI, Gemini, Ollama llava).
             #     ~25-50px accuracy. Good enough for buttons/menus/icons.
             locate_triggered = is_locate(transcript)
@@ -615,7 +615,7 @@ class CompanionManager(QObject):
                         return (t.x, t.y)
                     locate_task = asyncio.create_task(_ready())
                 elif cfg.anthropic_api_key:
-                    # Path A — Anthropic Computer Use (best accuracy)
+                    # Path A â€” Anthropic Computer Use (best accuracy)
                     from ai.element_locator import detect_element
                     locate_task = asyncio.create_task(detect_element(
                         screenshot_jpeg_b64=shot.base64_jpeg,
@@ -630,7 +630,7 @@ class CompanionManager(QObject):
                         user_question=transcript,
                     ))
                 else:
-                    # Path B — Universal grid locator (any vision LLM)
+                    # Path B â€” Universal grid locator (any vision LLM)
                     try:
                         from ai.universal_locator import detect_element_universal
                         llm = self._get_llm()
@@ -667,7 +667,7 @@ class CompanionManager(QObject):
                 except Exception:
                     detected = None
             if detected:
-                # Short label guess — first noun phrase after "the"/"where"
+                # Short label guess â€” first noun phrase after "the"/"where"
                 label = _guess_label(transcript)
                 detected_coord = (int(detected.x), int(detected.y), label)
                 # Fire the overlay NOW so the buddy flies over while the LLM
@@ -678,7 +678,7 @@ class CompanionManager(QObject):
                     float(detected.x), float(detected.y), label,
                 )
 
-            # ── Per-turn enrichment: code mode, language, OCR, attached docs ──
+            # â”€â”€ Per-turn enrichment: code mode, language, OCR, attached docs â”€â”€
             code_active = self._code_mode_auto and code_mode.is_code_window(title)
             lang_code = (multilang.detect_language(transcript)
                          if self._multilang else "en")
@@ -725,7 +725,7 @@ class CompanionManager(QObject):
             # Use per-app history so context doesn't bleed between apps
             history = self._app_memory.setdefault(ak, [])
 
-            # 5. Stream LLM — buffer partial [POINT:...] tags so they never leak
+            # 5. Stream LLM â€” buffer partial [POINT:...] tags so they never leak
             full_response = ""
             display_buf = ""
             self._cancel_flag = False
@@ -770,7 +770,7 @@ class CompanionManager(QObject):
             self.sig_response_done.emit(clean)
             self._last_response = clean   # for "say it again"
 
-            # Log to knowledge journal (skipped in quiz mode — those Q&As aren't
+            # Log to knowledge journal (skipped in quiz mode â€” those Q&As aren't
             # study material)
             if self._journal_enabled and not self._quiz_mode:
                 try:
@@ -797,7 +797,7 @@ class CompanionManager(QObject):
                 except Exception:
                     pass
 
-            # 7. TTS — hold the point visible while we speak. Switch voice
+            # 7. TTS â€” hold the point visible while we speak. Switch voice
             # to match the user's language for multilingual mode.
             if self._cancel_flag:
                 return
@@ -839,13 +839,13 @@ class CompanionManager(QObject):
         due = journal.due_for_review(limit=1)
         if not due:
             await self._reply_local(
-                "Nothing due for review right now — keep learning, I'll quiz "
+                "Nothing due for review right now â€” keep learning, I'll quiz "
                 "you in a few days."
             )
             return
         entry = due[0]
         msg = f"Review: {entry['question']}"
-        # Mark "correct" optimistically — a real implementation would wait for
+        # Mark "correct" optimistically â€” a real implementation would wait for
         # the user's answer and grade it. Stubbed: reschedule based on streak.
         try:
             journal.mark_reviewed(int(entry["id"]), correct=True)
@@ -854,11 +854,11 @@ class CompanionManager(QObject):
         await self._reply_local(msg)
 
     async def _advance_lesson_step(self, ak: str):
-        """User said 'next' — re-render the stored next lesson step via TTS,
+        """User said 'next' â€” re-render the stored next lesson step via TTS,
         no new LLM round-trip needed."""
         self._lesson_step_idx += 1
         if self._lesson_step_idx >= len(self._lesson_steps):
-            msg = "That's the last step — you're done!"
+            msg = "That's the last step â€” you're done!"
             self._lesson_steps = []
             self._lesson_step_idx = 0
         else:
@@ -896,7 +896,7 @@ class CompanionManager(QObject):
         self._state = state
         self.sig_state_changed.emit(state)
 
-    # ── Settings ──────────────────────────────────────────────────────────────
+    # â”€â”€ Settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def set_model(self, model: str):
         self._current_model = model
@@ -908,7 +908,7 @@ class CompanionManager(QObject):
         self._current_model = None
         # If switching to Copilot and the cached model list is stale (or
         # missing), refresh it in the background so the panel shows the
-        # *current* set of models GitHub offers — not stale hardcoded ones.
+        # *current* set of models GitHub offers â€” not stale hardcoded ones.
         if name == "copilot":
             try:
                 from ai.github_copilot_provider import cache_is_stale
@@ -936,7 +936,7 @@ class CompanionManager(QObject):
             self.sig_error.emit(f"{provider} model refresh failed: {e}")
 
     def refresh_copilot_models(self):
-        """Public — bound to the tray 'Refresh Copilot models' action."""
+        """Public â€” bound to the tray 'Refresh Copilot models' action."""
         self._submit(self._refresh_copilot_models())
 
     async def _refresh_copilot_models(self):
@@ -947,10 +947,10 @@ class CompanionManager(QObject):
         except Exception as e:
             self.sig_error.emit(f"Copilot model refresh failed: {e}")
 
-    # ── Ollama model management ──────────────────────────────────────────────
+    # â”€â”€ Ollama model management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def refresh_ollama_models(self):
-        """Public — kick off async poll of /api/tags. Result via sig_ollama_models."""
+        """Public â€” kick off async poll of /api/tags. Result via sig_ollama_models."""
         self._submit(self._refresh_ollama_models())
 
     async def _refresh_ollama_models(self):
@@ -962,7 +962,7 @@ class CompanionManager(QObject):
             self.sig_error.emit(f"Ollama model list failed: {e}")
 
     def set_ollama_model(self, kind: str, name: str):
-        """Tray callback — update the active vision/text model. No restart needed."""
+        """Tray callback â€” update the active vision/text model. No restart needed."""
         cfg.set_ollama_model(kind, name)
         # Force the provider instance to re-read cfg on next call
         if cfg.llm_provider() == "ollama":
@@ -974,7 +974,7 @@ class CompanionManager(QObject):
 
     async def _pull_ollama_model(self, name: str):
         from ai.ollama_models_registry import pull_model
-        self.sig_ollama_pull_status.emit(name, f"Pulling {name}…")
+        self.sig_ollama_pull_status.emit(name, f"Pulling {name}â€¦")
 
         def _progress(msg: str):
             if msg:
@@ -982,11 +982,11 @@ class CompanionManager(QObject):
 
         ok = await pull_model(name, cfg.ollama_host, on_progress=_progress)
         if ok:
-            self.sig_ollama_pull_status.emit(name, f"✓ {name} ready")
+            self.sig_ollama_pull_status.emit(name, f"âœ“ {name} ready")
             # Refresh the installed list so the tray menu picks it up
             await self._refresh_ollama_models()
         else:
-            self.sig_ollama_pull_status.emit(name, f"✗ Pull failed for {name}")
+            self.sig_ollama_pull_status.emit(name, f"âœ— Pull failed for {name}")
 
     def set_web_search(self, enabled: bool):
         self._web_search_enabled = enabled
@@ -1006,7 +1006,7 @@ class CompanionManager(QObject):
             self._submit(self._kickoff_quiz())
 
     async def _kickoff_quiz(self):
-        """Called when quiz mode flips ON — generates the first question
+        """Called when quiz mode flips ON â€” generates the first question
         without waiting for a user utterance."""
         if self._state != AppState.IDLE:
             return
@@ -1024,7 +1024,7 @@ class CompanionManager(QObject):
 
             full = ""
             async for chunk in self._get_llm().stream_response(
-                user_text="(quiz mode just enabled — start the quiz now)",
+                user_text="(quiz mode just enabled â€” start the quiz now)",
                 screenshots_b64=images_b64,
                 history=history,
                 system_prompt=system,
@@ -1061,7 +1061,7 @@ class CompanionManager(QObject):
         self._lesson_steps = []
         self._lesson_step_idx = 0
 
-    # ── Attached documents (drag-drop on panel) ──────────────────────────────
+    # â”€â”€ Attached documents (drag-drop on panel) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def attach_document(self, path: str) -> bool:
         text = pdf_context.extract_text(path)
@@ -1069,14 +1069,14 @@ class CompanionManager(QObject):
             return False
         from pathlib import Path
         self._attached_docs.append((Path(path).name, text))
-        # Cap context — most recent 3 docs
+        # Cap context â€” most recent 3 docs
         self._attached_docs = self._attached_docs[-3:]
         return True
 
     def clear_attachments(self):
         self._attached_docs = []
 
-    # ── Lesson recording ─────────────────────────────────────────────────────
+    # â”€â”€ Lesson recording â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def start_recording(self) -> Optional[str]:
         if self._recorder is None:
@@ -1098,7 +1098,7 @@ class CompanionManager(QObject):
     def is_recording(self) -> bool:
         return bool(self._recorder and self._recorder.is_recording)
 
-    # ── Workflow capture (record clicks/keystrokes) ──────────────────────────
+    # â”€â”€ Workflow capture (record clicks/keystrokes) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def workflow_start(self) -> bool:
         if self._workflow is None:
@@ -1111,23 +1111,23 @@ class CompanionManager(QObject):
         events = self._workflow.stop()
         return self._workflow.summarise() if events else ""
 
-    # ── Live collaboration ───────────────────────────────────────────────────
+    # â”€â”€ Live collaboration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def collab_start_host(self):
-        """Live-session host. Disabled — see tutor_features/collab.py."""
+        """Live-session host. Disabled â€” see tutor_features/collab.py."""
         self.sig_error.emit(
             "Live Session: not available in this build. "
             "Requires a WebRTC signalling server (planned for a future release)."
         )
 
     def collab_join(self, code: str):
-        """Live-session join. Disabled — see tutor_features/collab.py."""
+        """Live-session join. Disabled â€” see tutor_features/collab.py."""
         self.sig_error.emit(
             "Live Session: not available in this build. "
             "Requires a WebRTC signalling server (planned for a future release)."
         )
 
-    # ── Voice picker (ElevenLabs / Edge) ─────────────────────────────────────
+    # â”€â”€ Voice picker (ElevenLabs / Edge) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def set_tts_voice(self, voice: str):
         try:
@@ -1137,7 +1137,7 @@ class CompanionManager(QObject):
         except Exception:
             pass
 
-    # ── Toggle setters for the rest of the new features ──────────────────────
+    # â”€â”€ Toggle setters for the rest of the new features â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def set_code_mode_auto(self, enabled: bool):
         self._code_mode_auto = enabled
@@ -1151,12 +1151,12 @@ class CompanionManager(QObject):
     def set_ocr_enabled(self, enabled: bool):
         self._ocr_enabled = enabled
 
-    # ── Stop / cancel ─────────────────────────────────────────────────────────
+    # â”€â”€ Stop / cancel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def stop(self):
         """Cancel the current LLM stream + any in-flight TTS. Bound to Esc."""
         self._cancel_flag = True
-        # Kill audio playback immediately — flips the global stop event so
+        # Kill audio playback immediately â€” flips the global stop event so
         # the chunked PortAudio loop bails out within ~50 ms.
         try:
             from audio.playback import stop_audio
@@ -1174,3 +1174,4 @@ class CompanionManager(QObject):
         self._lesson_steps = []
         self._lesson_step_idx = 0
         self._emit_state(AppState.IDLE)
+

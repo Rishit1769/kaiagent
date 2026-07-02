@@ -1,31 +1,31 @@
-@echo off
-REM ────────────────────────────────────────────────────────────────────
-REM Clicky Windows — one-click build script
+﻿@echo off
+REM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+REM Kai Agent Windows â€” one-click build script
 REM
-REM Produces:  dist\Clicky\Clicky.exe   (portable folder)
-REM            Setup-Clicky.exe         (if Inno Setup is installed)
+REM Produces:  dist\Kai Agent\Kai Agent.exe   (portable folder)
+REM            Setup-Kai-Agent.exe         (if Inno Setup is installed)
 REM
-REM Usage:  build.bat           ← builds portable folder only
-REM         build.bat installer ← also builds Setup-Clicky.exe
-REM ────────────────────────────────────────────────────────────────────
+REM Usage:  build.bat           â† builds portable folder only
+REM         build.bat installer â† also builds Setup-Kai-Agent.exe
+REM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
 echo.
 echo ================================================================
-echo   Clicky for Windows — Build
+echo   Kai Agent for Windows â€” Build
 echo ================================================================
 echo.
 
-REM ── 1. Sanity check Python ─────────────────────────────────────────
+REM â”€â”€ 1. Sanity check Python â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 where python >nul 2>&1
 if errorlevel 1 (
     echo [ERROR] Python not found on PATH. Install Python 3.11+ first.
     exit /b 1
 )
 
-REM ── 2. Install build deps if missing ───────────────────────────────
+REM â”€â”€ 2. Install build deps if missing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 echo [1/4] Checking build dependencies...
 python -c "import PyInstaller" 2>nul
 if errorlevel 1 (
@@ -38,40 +38,40 @@ if errorlevel 1 (
     python -m pip install --quiet -r requirements.txt
 )
 
-REM ── 2b. Generate icon if missing ───────────────────────────────────
+REM â”€â”€ 2b. Generate icon if missing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 if not exist "assets\icon.ico" (
     echo     Generating default icon...
     python "assets\make_icon.py"
 )
 
-REM ── 3. Clean old build ─────────────────────────────────────────────
+REM â”€â”€ 3. Clean old build â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 echo [2/4] Cleaning old build...
 if exist build rmdir /s /q build
 if exist dist rmdir /s /q dist
 
-REM ── 4. Run PyInstaller ─────────────────────────────────────────────
+REM â”€â”€ 4. Run PyInstaller â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 echo [3/4] Building with PyInstaller (this takes 2-5 min)...
-python -m PyInstaller clicky.spec --clean --noconfirm
+python -m PyInstaller kai_agent.spec --clean --noconfirm
 if errorlevel 1 (
     echo.
     echo [ERROR] Build failed. Check the output above.
     exit /b 1
 )
 
-REM ── 5. Copy .env.example and LICENSE into the dist folder ─────────
+REM â”€â”€ 5. Copy .env.example and LICENSE into the dist folder â”€â”€â”€â”€â”€â”€â”€â”€â”€
 echo [4/4] Bundling docs and env template...
-copy /y ".env.example" "dist\Clicky\.env.example" >nul
-copy /y "LICENSE"       "dist\Clicky\LICENSE"      >nul
-copy /y "README.md"     "dist\Clicky\README.md"    >nul
+copy /y ".env.example" "dist\Kai Agent\.env.example" >nul
+copy /y "LICENSE"       "dist\Kai Agent\LICENSE"      >nul
+copy /y "README.md"     "dist\Kai Agent\README.md"    >nul
 
 echo.
 echo ================================================================
 echo   Portable build complete!
-echo   Run:  dist\Clicky\Clicky.exe
+echo   Run:  dist\Kai Agent\Kai Agent.exe
 echo ================================================================
 echo.
 
-REM ── 6. Optional: build Inno Setup installer ────────────────────────
+REM â”€â”€ 6. Optional: build Inno Setup installer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 if /i "%1"=="installer" (
     echo Building Inno Setup installer...
     where iscc >nul 2>&1
@@ -87,7 +87,8 @@ if /i "%1"=="installer" (
         iscc installer.iss
     )
     echo.
-    echo Installer: dist\Setup-Clicky.exe
+    echo Installer: dist\Setup-Kai-Agent.exe
 )
 
 endlocal
+

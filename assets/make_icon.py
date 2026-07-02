@@ -1,7 +1,7 @@
-"""
-Generate a Clicky-blue icon.ico for the PyInstaller build.
+﻿"""
+Generate a Kai Agent-blue icon.ico for the PyInstaller build.
 
-Produces assets/icon.ico with multiple sizes (16, 32, 48, 64, 128, 256) —
+Produces assets/icon.ico with multiple sizes (16, 32, 48, 64, 128, 256) â€”
 Windows picks the right size for taskbar, file explorer, and installer.
 
 Run once before building:  python assets\make_icon.py
@@ -11,7 +11,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 OUT = Path(__file__).parent / "icon.ico"
-BLUE = (0x33, 0x80, 0xFF, 255)     # Clicky cursor blue (#3380FF)
+BLUE = (0x33, 0x80, 0xFF, 255)     # Kai Agent cursor blue (#3380FF)
 
 
 def make_frame(size: int) -> Image.Image:
@@ -27,7 +27,7 @@ def make_frame(size: int) -> Image.Image:
             fill=(BLUE[0], BLUE[1], BLUE[2], alpha),
         )
 
-    # Solid blue triangle (the buddy), rotated -35°, scaled to fit
+    # Solid blue triangle (the buddy), rotated -35Â°, scaled to fit
     tri_size = int(size * 0.55)
     tri = Image.new("RGBA", (tri_size * 2, tri_size * 2), (0, 0, 0, 0))
     td = ImageDraw.Draw(tri)
@@ -64,3 +64,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -1,10 +1,10 @@
-"""
-Hybrid pointer — Clicky pointing accuracy upgrade.
+﻿"""
+Hybrid pointer â€” Kai Agent pointing accuracy upgrade.
 
 The original grid-locator was inaccurate because it asked the LLM to guess
 pixel coordinates from a numbered grid overlay. Vision models trained on
 natural images don't have pixel-precise spatial reasoning, so they'd often
-pick a neighboring cell or off-by-one row, sending Clicky's blue cursor to
+pick a neighboring cell or off-by-one row, sending Kai Agent's blue cursor to
 the wrong button.
 
 This module uses a three-tier resolver, each tier much more accurate than the next:
@@ -20,12 +20,12 @@ This module uses a three-tier resolver, each tier much more accurate than the ne
 
   Tier 3  Vision LLM grid fallback        ~1-3 s    best effort
           Only used when UIA + OCR both whiff. Delegates to the existing
-          element_locator.py — kept as a safety net.
+          element_locator.py â€” kept as a safety net.
 
 Public API:
     find_target(query: str) -> Optional[Target]
 
-The caller (companion_manager) treats Target as opaque — it has .center_xy
+The caller (companion_manager) treats Target as opaque â€” it has .center_xy
 in LOGICAL screen pixels, ready to feed directly into the overlay pointer.
 """
 
@@ -36,7 +36,7 @@ import re
 from dataclasses import dataclass
 from typing import Optional, List, Tuple
 
-log = logging.getLogger("clicky.pointer")
+log = logging.getLogger("kai_agent.pointer")
 
 
 @dataclass
@@ -47,16 +47,16 @@ class Target:
     bbox: Tuple[int, int, int, int]   # (left, top, right, bottom)
     label: str            # what we matched (button text, control type, etc.)
     source: str           # "uia" | "ocr" | "vision"
-    confidence: float     # 0.0–1.0
+    confidence: float     # 0.0â€“1.0
 
     @property
     def center_xy(self) -> Tuple[int, int]:
         return (self.x, self.y)
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-#  TIER 1 — Windows UI Automation
-# ──────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+#  TIER 1 â€” Windows UI Automation
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 _INTERACTIVE_TYPES = {
     # Most reliable click targets in UIA
@@ -102,11 +102,11 @@ def _find_via_uia(query: str, min_score: float = 0.5) -> Optional[Target]:
     try:
         import uiautomation as auto
     except ImportError:
-        log.warning("uiautomation not installed — Tier 1 (UIA) disabled")
+        log.warning("uiautomation not installed â€” Tier 1 (UIA) disabled")
         return None
 
     try:
-        # Get the focused (foreground) window — pointing is almost always
+        # Get the focused (foreground) window â€” pointing is almost always
         # for the active app, and walking the whole desktop is slow.
         root = auto.GetForegroundControl()
         if root is None:
@@ -116,7 +116,7 @@ def _find_via_uia(query: str, min_score: float = 0.5) -> Optional[Target]:
         return None
 
     best: Optional[Tuple[float, "auto.Control"]] = None
-    # Bounded walk — UIA trees can be huge in Chrome/Electron
+    # Bounded walk â€” UIA trees can be huge in Chrome/Electron
     queue: List[Tuple["auto.Control", int]] = [(root, 0)]
     visited = 0
     MAX_NODES = 3500
@@ -173,9 +173,9 @@ def _find_via_uia(query: str, min_score: float = 0.5) -> Optional[Target]:
     )
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-#  TIER 2 — Offline OCR (RapidOCR, ONNX)
-# ──────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+#  TIER 2 â€” Offline OCR (RapidOCR, ONNX)
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 _ocr_engine = None
 
@@ -187,7 +187,7 @@ def _get_ocr():
             from rapidocr_onnxruntime import RapidOCR
             _ocr_engine = RapidOCR()
         except ImportError:
-            log.warning("rapidocr-onnxruntime not installed — Tier 2 (OCR) disabled")
+            log.warning("rapidocr-onnxruntime not installed â€” Tier 2 (OCR) disabled")
             return None
         except Exception as e:
             log.warning("OCR engine init failed: %s", e)
@@ -262,16 +262,16 @@ def _find_via_ocr(query: str, screenshot_path: Optional[str] = None,
         return None
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-#  TIER 3 — Vision LLM grid fallback (delegated to existing element_locator)
-# ──────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+#  TIER 3 â€” Vision LLM grid fallback (delegated to existing element_locator)
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _find_via_vision(query: str, screenshot, llm_provider) -> Optional[Target]:
     """Last-resort: use the grid-locator path (element_locator.py)."""
     try:
         from ai.element_locator import locate_element  # v1 module
     except ImportError:
-        log.warning("element_locator not available — Tier 3 (vision) disabled")
+        log.warning("element_locator not available â€” Tier 3 (vision) disabled")
         return None
 
     try:
@@ -289,9 +289,9 @@ def _find_via_vision(query: str, screenshot, llm_provider) -> Optional[Target]:
         return None
 
 
-# ──────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #  PUBLIC API
-# ──────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def find_target(
     query: str,
@@ -305,16 +305,16 @@ def find_target(
 ) -> Optional[Target]:
     """Resolve a natural-language pointing query into pixel coordinates.
 
-    Tries UIA → OCR → Vision in order. Returns the first hit with confidence
+    Tries UIA â†’ OCR â†’ Vision in order. Returns the first hit with confidence
     >= the tier's threshold. Returns None if all three tiers whiff.
 
     Args:
-        query:        what the user asked Clicky to point at (e.g. "save button",
+        query:        what the user asked Kai Agent to point at (e.g. "save button",
                       "send icon", "login text field").
-        screenshot:   ScreenShot object (from screen.capture) — used by vision tier.
-        pil_image:    PIL.Image of the full screen — used by OCR tier. Optional;
+        screenshot:   ScreenShot object (from screen.capture) â€” used by vision tier.
+        pil_image:    PIL.Image of the full screen â€” used by OCR tier. Optional;
                       OCR will capture its own if not provided.
-        llm_provider: BaseLLMProvider instance — needed only for vision fallback.
+        llm_provider: BaseLLMProvider instance â€” needed only for vision fallback.
         skip_*:       Force-skip a tier (for testing or perf-sensitive paths).
 
     Returns:
@@ -323,19 +323,19 @@ def find_target(
     if not query or not query.strip():
         return None
 
-    # Tier 1: UIA — fast, free, often perfect
+    # Tier 1: UIA â€” fast, free, often perfect
     if not skip_uia:
         t = _find_via_uia(query)
         if t is not None and t.confidence >= 0.5:
             return t
 
-    # Tier 2: OCR — text-based fallback for canvas apps
+    # Tier 2: OCR â€” text-based fallback for canvas apps
     if not skip_ocr:
         t = _find_via_ocr(query, pil_image=pil_image)
         if t is not None and t.confidence >= 0.5:
             return t
 
-    # Tier 3: vision LLM grid — last resort
+    # Tier 3: vision LLM grid â€” last resort
     if not skip_vision and screenshot is not None and llm_provider is not None:
         t = _find_via_vision(query, screenshot, llm_provider)
         if t is not None:
@@ -346,3 +346,4 @@ def find_target(
 
 
 __all__ = ["Target", "find_target"]
+

@@ -1,7 +1,8 @@
-graymatter daemon ready: dir=C:\Users\Raunak\Documents\code\clicky-windows\.graymatter addr=tcp://127.0.0.1:56081 pid=8636 idle-exit=2m0s
+﻿graymatter daemon ready: dir=C:\Users\Raunak\Documents\code\kai-agent\.graymatter addr=tcp://127.0.0.1:56081 pid=8636 idle-exit=2m0s
 daemon: idle for 2m0s with no clients, exiting
 daemon: stopped
-graymatter daemon ready: dir=C:\Users\Raunak\Documents\code\clicky-windows\.graymatter addr=tcp://127.0.0.1:51124 pid=22800 idle-exit=2m0s
-graymatter daemon ready: dir=C:\Users\Raunak\Documents\code\clicky-windows\.graymatter addr=tcp://127.0.0.1:63339 pid=19840 idle-exit=2m0s
+graymatter daemon ready: dir=C:\Users\Raunak\Documents\code\kai-agent\.graymatter addr=tcp://127.0.0.1:51124 pid=22800 idle-exit=2m0s
+graymatter daemon ready: dir=C:\Users\Raunak\Documents\code\kai-agent\.graymatter addr=tcp://127.0.0.1:63339 pid=19840 idle-exit=2m0s
 daemon: idle for 2m0s with no clients, exiting
 daemon: stopped
+

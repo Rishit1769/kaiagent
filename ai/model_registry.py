@@ -1,13 +1,13 @@
-"""
+﻿"""
 Live model discovery + caching for Claude, OpenAI, and Gemini.
 
 Each provider exposes a "list models" endpoint we hit on demand:
-  • Anthropic:  GET /v1/models                    (key in x-api-key)
-  • OpenAI:     GET /v1/models                    (key in Authorization)
-  • Gemini:     GET /v1beta/models?key=...        (key in query)
+  â€¢ Anthropic:  GET /v1/models                    (key in x-api-key)
+  â€¢ OpenAI:     GET /v1/models                    (key in Authorization)
+  â€¢ Gemini:     GET /v1beta/models?key=...        (key in query)
 
-Cached per-provider to %LOCALAPPDATA%\\Clicky\\models_<provider>.json with a
-30-day TTL — long enough that you don't refetch constantly, short enough
+Cached per-provider to %LOCALAPPDATA%\\Kai Agent\\models_<provider>.json with a
+30-day TTL â€” long enough that you don't refetch constantly, short enough
 that new model releases land within a month without manual refresh.
 
 GitHub Copilot has its own (separate) implementation in github_copilot_provider.py
@@ -31,8 +31,8 @@ from config import cfg
 CACHE_TTL_SECONDS = 30 * 24 * 60 * 60   # 30 days
 
 
-# Curated fallback lists — used when the live endpoint is unreachable AND
-# the on-disk cache is empty. Reasonable defaults so Clicky still works
+# Curated fallback lists â€” used when the live endpoint is unreachable AND
+# the on-disk cache is empty. Reasonable defaults so Kai Agent still works
 # offline / on first run before refresh completes.
 _FALLBACKS: dict[str, list[dict]] = {
     "claude": [
@@ -55,7 +55,7 @@ _FALLBACKS: dict[str, list[dict]] = {
 
 def _data_dir() -> Path:
     base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    d = Path(base) / "Clicky"
+    d = Path(base) / "Kai Agent"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -64,7 +64,7 @@ def _cache_path(provider: str) -> Path:
     return _data_dir() / f"models_{provider}.json"
 
 
-# ─── Per-provider live fetchers ───────────────────────────────────────────────
+# â”€â”€â”€ Per-provider live fetchers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async def _fetch_claude() -> list[dict]:
     if not cfg.anthropic_api_key:
@@ -119,7 +119,7 @@ async def _fetch_openai() -> list[dict]:
             continue
         if not mid.startswith(chat_prefixes):
             continue
-        # Skip dated snapshots — they're noise. Keep only the alias forms.
+        # Skip dated snapshots â€” they're noise. Keep only the alias forms.
         if any(c.isdigit() and "-" in mid[mid.index(c):] for c in mid if False):
             pass
         # Drop fine-tune / preview-snapshot variants like ".../2024-08-06"
@@ -147,7 +147,7 @@ async def _fetch_gemini() -> list[dict]:
     data = r.json().get("models", [])
     out = []
     for m in data:
-        # Names look like "models/gemini-2.5-flash" — strip the prefix
+        # Names look like "models/gemini-2.5-flash" â€” strip the prefix
         full = m.get("name", "")
         mid = full.replace("models/", "")
         methods = m.get("supportedGenerationMethods", [])
@@ -162,7 +162,7 @@ async def _fetch_gemini() -> list[dict]:
             "vision": "vision" in mid or "gemini-1.5" in mid or "gemini-2" in mid
                       or "gemini-3" in mid,
         })
-    # Sort: newer first (rough heuristic — versions in name)
+    # Sort: newer first (rough heuristic â€” versions in name)
     out.sort(key=lambda m: m["id"], reverse=True)
     return out
 
@@ -174,7 +174,7 @@ _FETCHERS = {
 }
 
 
-# ─── Public API ───────────────────────────────────────────────────────────────
+# â”€â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def cached_models(provider: str) -> list[dict]:
     """Read on-disk cache, falling back to a curated list if missing."""
@@ -208,7 +208,7 @@ async def refresh(provider: str) -> list[dict]:
         raise ValueError(f"No live model fetcher for provider '{provider}'")
     models = await fetcher()
     if not models:
-        # No key → no models. Don't overwrite cache with empty list.
+        # No key â†’ no models. Don't overwrite cache with empty list.
         return cached_models(provider)
     blob = {"fetched_at": time.time(), "models": models}
     _cache_path(provider).write_text(json.dumps(blob, indent=2))
@@ -233,7 +233,7 @@ def model_ids(provider: str) -> list[str]:
 
 
 def best_default(provider: str) -> Optional[str]:
-    """Pick a sensible default model from the cache — vision-capable first."""
+    """Pick a sensible default model from the cache â€” vision-capable first."""
     models = cached_models(provider)
     for m in models:
         if m.get("vision"):
@@ -241,7 +241,7 @@ def best_default(provider: str) -> Optional[str]:
     return models[0]["id"] if models else None
 
 
-# ─── CLI: `python -m ai.model_registry [show|refresh] [provider]` ─────────────
+# â”€â”€â”€ CLI: `python -m ai.model_registry [show|refresh] [provider]` â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 if __name__ == "__main__":
     import sys
@@ -253,7 +253,7 @@ if __name__ == "__main__":
             stale = "stale" if cache_is_stale(prov) else "fresh"
             print(f"\n[{prov}] {stale}")
             for m in cached_models(prov):
-                v = "👁" if m.get("vision") else "  "
+                v = "ðŸ‘" if m.get("vision") else "  "
                 print(f"  {v} {m['id']}")
     elif cmd == "refresh":
         async def _run():
@@ -266,3 +266,4 @@ if __name__ == "__main__":
         asyncio.run(_run())
     else:
         print("Usage: python -m ai.model_registry [show|refresh] [claude|openai|gemini]")
+

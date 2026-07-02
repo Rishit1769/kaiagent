@@ -1,25 +1,26 @@
-; ────────────────────────────────────────────────────────────────────
-;  Clicky for Windows — Inno Setup script
+﻿; â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+;  Kai Agent for Windows â€” Inno Setup script
 ;
-;  Builds a single Setup-Clicky.exe from the PyInstaller dist folder.
+;  Builds a single Setup-Kai-Agent.exe from the PyInstaller dist folder.
 ;
 ;  Prerequisites:
-;    1. Run  build.bat  first (produces dist\Clicky\)
+;    1. Run  build.bat  first (produces dist\Kai Agent\)
 ;    2. Install Inno Setup 6 from https://jrsoftware.org/isdl.php
 ;    3. Run:  iscc installer.iss
 ;
-;  Output:  dist\Setup-Clicky.exe   (single-file installer, ~200-400 MB)
-; ────────────────────────────────────────────────────────────────────
+;  Output:  dist\Setup-Kai-Agent.exe   (single-file installer, ~200-400 MB)
+; â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-#define MyAppName        "Clicky"
+#define MyAppName        "Kai Agent"
 #define MyAppVersion     "1.1.2"
 #define MyAppPublisher   "Shashank Singh"
-#define MyAppURL         "https://github.com/Bitshank-2338/clicky-windows"
-#define MyAppExeName     "Clicky.exe"
+#define MyAppURL         "https://github.com/Bitshank-2338/kai-agent"
+#define MyAppExeName     "Kai Agent.exe"
 
 [Setup]
 AppId={{9A4E3F2C-7B1D-4A8F-9C6E-3D7F1B5E9A0C}
 AppName={#MyAppName}
+AppVerName=Kai Agent Setup - Kai Agent
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
@@ -29,7 +30,7 @@ DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 LicenseFile=LICENSE
 OutputDir=dist
-OutputBaseFilename=Setup-Clicky
+OutputBaseFilename=Setup-Kai-Agent
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
@@ -47,12 +48,12 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon";  Description: "Create a &desktop shortcut"; GroupDescription: "Additional shortcuts:"
-Name: "startupicon";  Description: "Launch Clicky when Windows &starts";  GroupDescription: "Additional shortcuts:"; Flags: unchecked
-Name: "installollama"; Description: "Also download && install Ollama (free local AI engine, ~700 MB) — needed for the no-API-key mode"; GroupDescription: "Free AI engine:"
+Name: "startupicon";  Description: "Launch Kai Agent when Windows &starts";  GroupDescription: "Additional shortcuts:"; Flags: unchecked
+Name: "installollama"; Description: "Also download && install Ollama (free local AI engine, ~700 MB) â€” needed for the no-API-key mode"; GroupDescription: "Free AI engine:"
 
 [Files]
 ; Everything PyInstaller produced
-Source: "dist\Clicky\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "dist\Kai Agent\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#MyAppName}";                    Filename: "{app}\{#MyAppExeName}"
@@ -70,7 +71,7 @@ Filename: "powershell.exe"; \
   Tasks: installollama; \
   Flags: runhidden waituntilterminated
 
-; Offer to launch Clicky after install
+; Offer to launch Kai Agent after install
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
 
 [Code]
@@ -79,12 +80,13 @@ begin
   if CurStep = ssPostInstall then
   begin
     MsgBox(
-      'Clicky installed successfully!' #13#13
-      'On first launch, Clicky will walk you through downloading the AI models' #13
+      'Kai Agent installed successfully!' #13#13
+      'On first launch, Kai Agent will walk you through downloading the AI models' #13
       'so it can answer your questions offline (free, no API keys needed).' #13#13
-      'You can also use Claude / OpenAI / Gemini / GitHub Copilot — see' #13
+      'You can also use Claude / OpenAI / Gemini / GitHub Copilot â€” see' #13
       '.env.example inside the install folder for the template.',
       mbInformation, MB_OK
     );
   end;
 end;
+

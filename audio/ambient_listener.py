@@ -1,9 +1,9 @@
-"""
+﻿"""
 Always-on ambient audio listener.
 Handles:
   - Continuous mic stream (single sounddevice input)
   - Energy-based VAD to detect speech segments
-  - Wake-word detection via faster-whisper tiny model (triggers on "clicky" / "hey clicky")
+  - Wake-word detection via faster-whisper tiny model (triggers on "kai agent" / "hey kai agent")
   - Push-to-talk buffering when hotkey is held
   - Streams RMS level to UI (cursor waveform + panel)
 """
@@ -11,12 +11,21 @@ Handles:
 import threading
 import time
 from enum import Enum, auto
-from typing import Callable, Optional
+import logging
+from typing import Any, Callable, Optional
 
 import numpy as np
-import sounddevice as sd
 
-from audio.capture import pcm16_to_wav, SAMPLE_RATE
+from audio.capture import (
+    SAMPLE_RATE,
+    SOUNDDEVICE_IMPORT_ERROR,
+    audio_backend_available,
+    pcm16_to_wav,
+    sd,
+)
+
+
+logger = logging.getLogger(__name__)
 
 
 class Mode(Enum):
@@ -24,7 +33,7 @@ class Mode(Enum):
     RECORDING     = auto()   # actively buffering user utterance
 
 
-# ── Tuning knobs ──────────────────────────────────────────────────────────────
+# â”€â”€ Tuning knobs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 BLOCK_MS           = 30              # mic callback granularity
 FRAMES_PER_BLOCK   = int(SAMPLE_RATE * BLOCK_MS / 1000)
 ENERGY_THRESHOLD   = 0.006           # lower = catches quieter speech
@@ -33,12 +42,18 @@ SILENCE_BLOCKS_END = 20              # ~600ms of silence ends a segment
 MAX_SEGMENT_BLOCKS = 120             # ~3.6s max wake-word segment
 PRE_ROLL_BLOCKS    = 18              # ~540ms of pre-roll for the wake word
 
-# Wake phrases — whisper tiny often mis-transcribes "clicky" so we cover variants
+# Wake phrases â€” whisper tiny often mis-transcribes "Kai Agent" on short clips,
+# so we cover a few likely variants.
 WAKE_WORDS = (
-    "clicky", "click e", "click he", "click me", "clickie", "clicki",
-    "cliki", "klicki", "klicky", "kilicky", "clickey", "clickity",
-    "hey clicky", "hi clicky", "hey click", "ok clicky", "yo clicky",
-    "hey clicki", "hey klicki", "hey clickie",
+    "kai agent",
+    "kaiagent",
+    "kay agent",
+    "kye agent",
+    "kai ajent",
+    "hey kai agent",
+    "hi kai agent",
+    "ok kai agent",
+    "yo kai agent",
 )
 
 
@@ -59,8 +74,9 @@ class AmbientListener:
         self._on_wake = on_wake
 
         self._mode: Mode = Mode.STANDBY
-        self._stream: Optional[sd.InputStream] = None
+        self._stream: Optional[Any] = None
         self._running = False
+        self._audio_available = audio_backend_available()
 
         # Rolling pre-roll ring buffer (small)
         self._preroll: list[np.ndarray] = []
@@ -81,10 +97,16 @@ class AmbientListener:
         # Enable/disable toggle
         self._wake_word_enabled = True
 
-    # ── Public API ────────────────────────────────────────────────────────────
+    # â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def start(self):
         if self._running:
+            return
+        if not self._audio_available:
+            logger.warning(
+                "Ambient listener disabled because sounddevice is unavailable."
+            )
+            self._wake_word_enabled = False
             return
         self._running = True
         self._stream = sd.InputStream(
@@ -126,7 +148,15 @@ class AmbientListener:
     def wake_word_enabled(self) -> bool:
         return self._wake_word_enabled
 
-    # ── Audio callback ────────────────────────────────────────────────────────
+    @property
+    def audio_available(self) -> bool:
+        return self._audio_available
+
+    @property
+    def audio_error(self) -> Optional[Exception]:
+        return SOUNDDEVICE_IMPORT_ERROR
+
+    # â”€â”€ Audio callback â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _callback(self, indata: np.ndarray, frames: int, time_info, status):
         if not self._running:
@@ -188,7 +218,7 @@ class AmbientListener:
         self._seg_silence_blocks = 0
         self._in_segment = False
 
-    # ── Wake-word transcription (off the audio thread) ────────────────────────
+    # â”€â”€ Wake-word transcription (off the audio thread) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _dispatch_wake_check(self, pcm: bytes):
         if self._wake_inflight:
@@ -227,7 +257,7 @@ class AmbientListener:
                 condition_on_previous_text=False,
                 no_speech_threshold=0.45,
                 temperature=0.0,
-                initial_prompt="Clicky is a helpful AI assistant.",
+                initial_prompt="Kai Agent is a helpful AI assistant.",
             )
             return " ".join(s.text for s in segments)
         finally:
@@ -241,3 +271,4 @@ class AmbientListener:
                     "tiny.en", device="cpu", compute_type="int8"
                 )
             return self._wake_model
+

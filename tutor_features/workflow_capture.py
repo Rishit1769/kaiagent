@@ -1,16 +1,16 @@
-"""
-Workflow capture — record a sequence of clicks + keystrokes the user
-performs, then let Clicky explain or replay them.
+﻿"""
+Workflow capture â€” record a sequence of clicks + keystrokes the user
+performs, then let Kai Agent explain or replay them.
 
 Status: foundation laid. Hotkey + recording loop work. Replay layer is
-intentionally a stub — playback of synthetic input is a security concern
+intentionally a stub â€” playback of synthetic input is a security concern
 and needs a careful UX (preview, confirm, undo) before it's safe to ship.
 
 Use:
     capt = WorkflowCapture()
-    capt.start()      # Ctrl+Alt+R → starts capture
+    capt.start()      # Ctrl+Alt+R â†’ starts capture
     # ... user clicks around, types
-    capt.stop()       # Ctrl+Alt+R again → stops, returns events list
+    capt.stop()       # Ctrl+Alt+R again â†’ stops, returns events list
 
 Each event:  {"t": float, "kind": "click"|"key", "data": {...}}
 """
@@ -91,5 +91,6 @@ class WorkflowCapture:
             else:
                 lines.append(f"  [{t:5.1f}s] key {e['data']['key']}")
         if len(self._events) > 40:
-            lines.append(f"  …and {len(self._events) - 40} more events.")
+            lines.append(f"  â€¦and {len(self._events) - 40} more events.")
         return "Recorded workflow:\n" + "\n".join(lines)
+

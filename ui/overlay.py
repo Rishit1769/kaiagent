@@ -1,15 +1,15 @@
-"""
-Clicky's blue buddy cursor — faithful port of the original macOS overlay.
+﻿"""
+Kai Agent's blue buddy cursor â€” faithful port of the original macOS overlay.
 
-Matches clicky-main/leanring-buddy/OverlayWindow.swift:
-  - Flat solid blue equilateral triangle (#3380FF), 16×16, rotated -35°
+Matches kai_agent-main/leanring-buddy/OverlayWindow.swift:
+  - Flat solid blue equilateral triangle (#3380FF), 16Ã—16, rotated -35Â°
   - Sits at (+35, +25) relative to the real cursor
   - Soft blue drop shadow (radius ~8)
   - States cross-fade in place:
-      idle / speaking → triangle
-      listening       → 5-bar waveform
-      thinking        → rotating arc spinner
-      pointing        → triangle + speech bubble ("found it!" etc.)
+      idle / speaking â†’ triangle
+      listening       â†’ 5-bar waveform
+      thinking        â†’ rotating arc spinner
+      pointing        â†’ triangle + speech bubble ("found it!" etc.)
 """
 
 import math
@@ -90,17 +90,17 @@ class CursorOverlay(QWidget):
         self._fly_duration: float = 1.8
         self._flight_scale: float = 1.0
         self._dwell_until: float = 0.0
-        # When True, dwell never expires — manager releases after TTS finishes
+        # When True, dwell never expires â€” manager releases after TTS finishes
         self._hold_dwell: bool = False
 
-        # Slow mode — doubles flight + dwell so Clicky feels more like a teacher
+        # Slow mode â€” doubles flight + dwell so Kai Agent feels more like a teacher
         self._slow_mode: bool = False
 
         # Optional highlight ring around detected element (x, y, radius)
         self._ring: Optional[tuple] = None
         self._ring_phase: float = 0.0
 
-        # Whiteboard annotations — list of dicts the overlay paints each tick.
+        # Whiteboard annotations â€” list of dicts the overlay paints each tick.
         # Each item: {"kind": "arrow"|"circle"|"text"|"underline", "args": (...),
         #             "born": time, "ttl": seconds}
         self._annotations: list[dict] = []
@@ -134,7 +134,7 @@ class CursorOverlay(QWidget):
         self._lock_timer.setSingleShot(True)
         self._lock_timer.timeout.connect(self._release_lock)
 
-    # ── Public API ────────────────────────────────────────────────────────────
+    # â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def set_mode(self, mode: str):
         self._mode = mode
@@ -150,7 +150,7 @@ class CursorOverlay(QWidget):
 
         (x, y) is the EXACT pixel of the UI element in logical screen space
         (same space Qt's QCursor.pos() uses). The buddy lands with the tip of
-        its triangle on that pixel — the highlight ring marks the exact spot."""
+        its triangle on that pixel â€” the highlight ring marks the exact spot."""
         # Buddy's tip should sit on the target pixel. The triangle is drawn
         # centred on _display_pos, so we just plant _display_pos there.
         self._locked_pos = QPointF(x, y)
@@ -169,23 +169,23 @@ class CursorOverlay(QWidget):
 
     def set_point_hold(self, hold: bool):
         """Called by manager when TTS starts (True) / ends (False).
-        While held, dwell never auto-expires — the buddy stays on the element
-        the entire time Clicky speaks."""
+        While held, dwell never auto-expires â€” the buddy stays on the element
+        the entire time Kai Agent speaks."""
         self._hold_dwell = hold
         if hold and self._flight_phase == _PHASE_DWELLING:
             self._dwell_until = float("inf")
 
     def release_point(self):
-        """Manager signals that TTS is done — fly buddy back to cursor now."""
+        """Manager signals that TTS is done â€” fly buddy back to cursor now."""
         self._hold_dwell = False
         if self._flight_phase == _PHASE_DWELLING:
-            self._dwell_until = 0.0   # expires this tick → triggers return
+            self._dwell_until = 0.0   # expires this tick â†’ triggers return
         # Fade ring on next paint
         self._ring = None
         # Drop any whiteboard annotations from this lesson too
         self._annotations = []
 
-    # ── Whiteboard annotations ───────────────────────────────────────────────
+    # â”€â”€ Whiteboard annotations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def add_arrow(self, x1: float, y1: float, x2: float, y2: float,
                   ttl: float = 8.0):
@@ -241,7 +241,7 @@ class CursorOverlay(QWidget):
         self._release_lock()
         self.set_mode(MODE_IDLE)
 
-    # ── Internal ──────────────────────────────────────────────────────────────
+    # â”€â”€ Internal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _cover_all_monitors(self):
         geo = QApplication.primaryScreen().virtualGeometry()
@@ -264,11 +264,11 @@ class CursorOverlay(QWidget):
         qp = QCursor.pos()
         real = QPointF(qp.x(), qp.y())
 
-        # ── Pointing phase machine ──
+        # â”€â”€ Pointing phase machine â”€â”€
         if self._flight_phase in (_PHASE_FLYING, _PHASE_RETURNING):
             elapsed = time.monotonic() - self._fly_t0
             lp = min(1.0, elapsed / max(0.001, self._fly_duration))
-            # Smoothstep easing — gentle start and end, teacher-friendly
+            # Smoothstep easing â€” gentle start and end, teacher-friendly
             t = lp * lp * (3.0 - 2.0 * lp)
             omt = 1.0 - t
             bx = omt * omt * self._fly_start_pos.x() \
@@ -323,7 +323,7 @@ class CursorOverlay(QWidget):
             self.update()
             return
 
-        # ── Normal cursor-follow spring ──
+        # â”€â”€ Normal cursor-follow spring â”€â”€
         target = QPointF(real.x() + OFFSET_X, real.y() + OFFSET_Y)
         stiffness, damping = 0.28, 0.62
 
@@ -343,7 +343,7 @@ class CursorOverlay(QWidget):
 
         self.update()
 
-    # ── Painting ──────────────────────────────────────────────────────────────
+    # â”€â”€ Painting â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def paintEvent(self, event):
         p = QPainter(self)
@@ -355,7 +355,7 @@ class CursorOverlay(QWidget):
         ):
             self._draw_ring(p)
 
-        # Whiteboard annotations — drawn under the buddy too
+        # Whiteboard annotations â€” drawn under the buddy too
         if self._annotations:
             self._draw_annotations(p)
 
@@ -468,7 +468,7 @@ class CursorOverlay(QWidget):
             p.drawEllipse(QPointF(cx, cy), radius * r_mul, radius * r_mul)
 
     def _draw_triangle(self, p, cx, cy):
-        """Flat blue equilateral triangle, rotated -35° → cursor-like tilt."""
+        """Flat blue equilateral triangle, rotated -35Â° â†’ cursor-like tilt."""
         size = TRI_SIZE
         height = size * math.sqrt(3) / 2
 
@@ -482,7 +482,7 @@ class CursorOverlay(QWidget):
         p.save()
         p.translate(cx, cy)
 
-        # Glow — drawn unrotated so it's a round halo
+        # Glow â€” drawn unrotated so it's a round halo
         glow = QColor(CURSOR_BLUE)
         for i, (r_mul, alpha) in enumerate(((2.2, 35), (1.6, 55), (1.15, 85))):
             glow.setAlpha(alpha)
@@ -527,7 +527,7 @@ class CursorOverlay(QWidget):
             p.drawRoundedRect(QRectF(x, y, bar_w, h), 1.2, 1.2)
 
     def _draw_spinner(self, p, cx, cy):
-        """Rotating arc — mirrors BlueCursorSpinnerView (trim 0.15 → 0.85)."""
+        """Rotating arc â€” mirrors BlueCursorSpinnerView (trim 0.15 â†’ 0.85)."""
         diameter = 14.0
         rect = QRectF(cx - diameter / 2, cy - diameter / 2, diameter, diameter)
 
@@ -544,7 +544,7 @@ class CursorOverlay(QWidget):
         p.setPen(pen)
         p.setBrush(Qt.BrushStyle.NoBrush)
 
-        # 70% of the circle (0.15→0.85), rotating
+        # 70% of the circle (0.15â†’0.85), rotating
         start_deg = -self._spin_phase * 180 / math.pi * 2
         span_deg = 252   # 0.7 * 360
         p.drawArc(rect, int(start_deg * 16) % (360 * 16), int(span_deg * 16))
@@ -591,3 +591,4 @@ class CursorOverlay(QWidget):
         p.drawText(QRectF(box_x, box_y, tw, th), Qt.AlignmentFlag.AlignCenter, label)
 
         p.restore()
+

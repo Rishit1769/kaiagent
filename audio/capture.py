@@ -1,8 +1,14 @@
-import threading
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 import numpy as np
-import sounddevice as sd
+
+try:
+    import sounddevice as sd
+except ModuleNotFoundError as exc:
+    sd = None
+    SOUNDDEVICE_IMPORT_ERROR = exc
+else:
+    SOUNDDEVICE_IMPORT_ERROR = None
 
 SAMPLE_RATE = 16000
 CHANNELS    = 1
@@ -22,12 +28,16 @@ class MicCapture:
     ):
         self._on_chunk = on_audio_chunk
         self._on_level = on_level
-        self._stream: Optional[sd.InputStream] = None
+        self._stream: Optional[Any] = None
         self._running = False
 
     def start(self):
         if self._running:
             return
+        if sd is None:
+            raise RuntimeError(
+                "sounddevice is not installed; microphone capture is unavailable."
+            ) from SOUNDDEVICE_IMPORT_ERROR
         self._running = True
         self._stream = sd.InputStream(
             samplerate=SAMPLE_RATE,
@@ -56,6 +66,10 @@ class MicCapture:
         rms = float(np.sqrt(np.mean(pcm_float ** 2)))
         self._on_level(rms)
         self._on_chunk(pcm_bytes)
+
+
+def audio_backend_available() -> bool:
+    return sd is not None
 
 
 def pcm16_to_wav(pcm_data: bytes, sample_rate: int = SAMPLE_RATE) -> bytes:

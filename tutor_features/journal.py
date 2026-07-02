@@ -1,20 +1,20 @@
-"""
+﻿"""
 Knowledge Journal + Spaced Repetition.
 
-Every Q&A Clicky has gets logged to a SQLite db at:
-    %LOCALAPPDATA%\\Clicky\\journal.db
+Every Q&A Kai Agent has gets logged to a SQLite db at:
+    %LOCALAPPDATA%\\Kai Agent\\journal.db
 
 Voice queries that surface this:
-    "what did I learn today"            → today's entries
-    "what did I learn this week"        → past 7 days
-    "show me my journal"                → all-time
-    "quiz me on what I learned"         → spaced-repetition pull
+    "what did I learn today"            â†’ today's entries
+    "what did I learn this week"        â†’ past 7 days
+    "show me my journal"                â†’ all-time
+    "quiz me on what I learned"         â†’ spaced-repetition pull
 
 Spaced repetition uses the SM-2 lite algorithm:
     intervals (days):  1, 3, 7, 14, 30
     each entry has `next_review_at` and `streak` columns
-    "correct" answer  → streak +1, push next_review out
-    "wrong"  answer   → reset streak to 0, due tomorrow
+    "correct" answer  â†’ streak +1, push next_review out
+    "wrong"  answer   â†’ reset streak to 0, due tomorrow
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ _INTERVALS_DAYS = (1, 3, 7, 14, 30, 60, 120)
 
 def _db_path() -> Path:
     base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    d = Path(base) / "Clicky"
+    d = Path(base) / "Kai Agent"
     d.mkdir(parents=True, exist_ok=True)
     return d / "journal.db"
 
@@ -65,7 +65,7 @@ def _connect() -> sqlite3.Connection:
     return conn
 
 
-# ─── Logging ──────────────────────────────────────────────────────────────────
+# â”€â”€â”€ Logging â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def log_qa(
     question: str,
@@ -93,7 +93,7 @@ def log_qa(
         return cur.lastrowid
 
 
-# ─── Query helpers ────────────────────────────────────────────────────────────
+# â”€â”€â”€ Query helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def entries_since(seconds_ago: float) -> list[dict]:
     cutoff = time.time() - seconds_ago
@@ -160,7 +160,7 @@ def mark_reviewed(entry_id: int, correct: bool) -> None:
         )
 
 
-# ─── Summarisers — used for "what did I learn today" voice replies ────────────
+# â”€â”€â”€ Summarisers â€” used for "what did I learn today" voice replies â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def summarise(entries: list[dict], header: str = "") -> str:
     if not entries:
@@ -169,7 +169,8 @@ def summarise(entries: list[dict], header: str = "") -> str:
     for e in entries[:10]:
         when = datetime.fromtimestamp(e["created_at"]).strftime("%I:%M %p")
         q = e["question"][:80]
-        lines.append(f"• {when} — {q}")
+        lines.append(f"â€¢ {when} â€” {q}")
     if len(entries) > 10:
-        lines.append(f"…and {len(entries) - 10} more.")
+        lines.append(f"â€¦and {len(entries) - 10} more.")
     return "\n".join(lines)
+

@@ -1,22 +1,22 @@
-"""
-GitHub Copilot provider — uses the device-flow OAuth handshake (same flow
+﻿"""
+GitHub Copilot provider â€” uses the device-flow OAuth handshake (same flow
 VS Code / nvim-copilot use) so students don't need to paste an API key.
 
-Default model is `gpt-4o-mini` — it's on Copilot's *no premium request* tier
+Default model is `gpt-4o-mini` â€” it's on Copilot's *no premium request* tier
 at the time of writing, so Free/Pro/Student seats don't burn premium quota.
 
 Auth flow (one-time, ~30 seconds):
     python -m ai.github_copilot_provider login
-    → prints a 9-char user code + opens https://github.com/login/device
-    → you paste the code, click "Authorize"
-    → token cached to %LOCALAPPDATA%\\Clicky\\github_token.json
+    â†’ prints a 9-char user code + opens https://github.com/login/device
+    â†’ you paste the code, click "Authorize"
+    â†’ token cached to %LOCALAPPDATA%\\Kai Agent\\github_token.json
 
 Chat flow (every call):
-    GitHub token  → exchange for short-lived Copilot token (cached to ~25 min)
-                  → stream from https://api.githubcopilot.com/chat/completions
+    GitHub token  â†’ exchange for short-lived Copilot token (cached to ~25 min)
+                  â†’ stream from https://api.githubcopilot.com/chat/completions
 
 Note: this uses the same public client_id VS Code ships with. It's unofficial
-— GitHub has not published a public Copilot Chat API — but it's the de-facto
+â€” GitHub has not published a public Copilot Chat API â€” but it's the de-facto
 standard path dozens of community clients (copilot.vim, copilot.lua, aider,
 etc.) use. Your Copilot subscription is consumed normally.
 """
@@ -49,11 +49,11 @@ COPILOT_MODELS_URL = "https://api.githubcopilot.com/models"
 FALLBACK_MODEL = "gpt-4o-mini"
 MAX_TOKENS = 1024
 
-# Cache TTL — refetch /models if cache is older than this.
+# Cache TTL â€” refetch /models if cache is older than this.
 MODEL_CACHE_TTL_SECONDS = 6 * 60 * 60   # 6 hours
 
 # Editor identity. Bumping these every release year matches what VS Code's
-# Copilot Chat extension actually sends — older values get 400'd.
+# Copilot Chat extension actually sends â€” older values get 400'd.
 EDITOR_VERSION = "vscode/1.96.0"
 EDITOR_PLUGIN  = "copilot-chat/0.23.1"
 USER_AGENT     = "GitHubCopilotChat/0.23.1"
@@ -61,7 +61,7 @@ USER_AGENT     = "GitHubCopilotChat/0.23.1"
 
 def _data_dir() -> Path:
     base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    d = Path(base) / "Clicky"
+    d = Path(base) / "Kai Agent"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -74,7 +74,7 @@ def _models_cache_path() -> Path:
     return _data_dir() / "copilot_models.json"
 
 
-# ─── Device-flow login ────────────────────────────────────────────────────────
+# â”€â”€â”€ Device-flow login â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _login_log_path() -> Path:
     return _data_dir() / "copilot_login.log"
@@ -82,7 +82,7 @@ def _login_log_path() -> Path:
 
 def _log_login(line: str) -> None:
     """Append a timestamped line to the login log so we can debug failures
-    after the fact (the user can grab this from %LOCALAPPDATA%\\Clicky\\)."""
+    after the fact (the user can grab this from %LOCALAPPDATA%\\Kai Agent\\)."""
     try:
         from datetime import datetime
         with open(_login_log_path(), "a", encoding="utf-8") as f:
@@ -95,7 +95,7 @@ async def device_login(open_browser: bool = True,
                        on_code: "Optional[callable]" = None) -> str:
     """Run the GitHub device-code OAuth flow. Returns the github access token.
 
-    on_code(user_code, verification_uri) — optional callback fired once the
+    on_code(user_code, verification_uri) â€” optional callback fired once the
     device code is known, before we start polling. The UI uses this to display
     the code in the panel instead of (or in addition to) the terminal.
     """
@@ -116,13 +116,13 @@ async def device_login(open_browser: bool = True,
     expires_in = int(d.get("expires_in", 900))
     _log_login(f"Got device code. user_code={user_code} interval={interval}s expires_in={expires_in}s")
 
-    print("\n" + "─" * 56)
+    print("\n" + "â”€" * 56)
     print("  GITHUB COPILOT LOGIN")
-    print("─" * 56)
+    print("â”€" * 56)
     print(f"  1. Open: {verification_uri}")
     print(f"  2. Enter code: {user_code}")
     print(f"  3. Click 'Authorize' in GitHub.")
-    print("─" * 56 + "\n")
+    print("â”€" * 56 + "\n")
 
     # Notify the UI so the code is visible even when there's no terminal
     if on_code is not None:
@@ -163,8 +163,8 @@ async def device_login(open_browser: bool = True,
             if "access_token" in body:
                 token = body["access_token"]
                 _token_path().write_text(json.dumps({"access_token": token}))
-                _log_login(f"✅ Signed in after {poll_count} polls. Token saved.")
-                print("✅  Signed in. Token saved to", _token_path())
+                _log_login(f"âœ… Signed in after {poll_count} polls. Token saved.")
+                print("âœ…  Signed in. Token saved to", _token_path())
                 # Eagerly fetch the model list so the panel reflects what
                 # the user actually has access to *right now*.
                 try:
@@ -176,18 +176,18 @@ async def device_login(open_browser: bool = True,
                 return token
             if body.get("error") == "authorization_pending":
                 if poll_count % 6 == 0:   # log roughly every 30s
-                    _log_login(f"poll #{poll_count}: still pending…")
+                    _log_login(f"poll #{poll_count}: still pendingâ€¦")
                 continue
             if body.get("error") == "slow_down":
                 interval += 5
-                _log_login(f"poll #{poll_count}: slow_down — interval now {interval}s")
+                _log_login(f"poll #{poll_count}: slow_down â€” interval now {interval}s")
                 continue
             if body.get("error") in ("expired_token", "access_denied"):
                 _log_login(f"poll #{poll_count}: terminal error {body.get('error')}")
                 raise RuntimeError(f"Copilot login failed: {body.get('error')}")
             _log_login(f"poll #{poll_count}: unexpected body keys={list(body.keys())}")
 
-    _log_login(f"❌ Timed out after {poll_count} polls.")
+    _log_login(f"âŒ Timed out after {poll_count} polls.")
     raise TimeoutError("Copilot device-flow login timed out.")
 
 
@@ -205,17 +205,17 @@ def is_authenticated() -> bool:
     return load_github_token() is not None
 
 
-# ─── Live model discovery ─────────────────────────────────────────────────────
+# â”€â”€â”€ Live model discovery â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #
 # GitHub Copilot exposes `GET /models` which returns every model the user's
 # Copilot seat can currently access, along with its billing multiplier
-# (0 = free / does not burn a premium request, ≥1 = consumes premium quota).
+# (0 = free / does not burn a premium request, â‰¥1 = consumes premium quota).
 #
 # We auto-refresh this list whenever:
-#   • cache is older than MODEL_CACHE_TTL_SECONDS
-#   • user signs in via device flow
-#   • user clicks "Refresh Copilot models" in the tray menu
-#   • user switches to Copilot from another provider
+#   â€¢ cache is older than MODEL_CACHE_TTL_SECONDS
+#   â€¢ user signs in via device flow
+#   â€¢ user clicks "Refresh Copilot models" in the tray menu
+#   â€¢ user switches to Copilot from another provider
 
 async def fetch_copilot_token_only() -> str:
     """Exchange the GitHub OAuth token for a Copilot session token (one-shot)."""
@@ -235,12 +235,12 @@ async def fetch_copilot_token_only() -> str:
     if r.status_code == 401:
         raise RuntimeError(
             "GitHub rejected your token (401). Re-run the login from "
-            "Tray → Model → Sign in to GitHub Copilot…"
+            "Tray â†’ Model â†’ Sign in to GitHub Copilotâ€¦"
         )
     if r.status_code == 403:
         raise RuntimeError(
             "Your GitHub account doesn't have an active Copilot subscription "
-            "(403). Verify at https://github.com/settings/copilot — Free, Pro, "
+            "(403). Verify at https://github.com/settings/copilot â€” Free, Pro, "
             "and Education seats all work; the seat just needs to be active."
         )
     r.raise_for_status()
@@ -294,7 +294,7 @@ def _normalise_model(m: dict) -> dict:
 
 
 async def refresh_models_to_cache() -> list[dict]:
-    """Fetch live + write to %LOCALAPPDATA%\\Clicky\\copilot_models.json."""
+    """Fetch live + write to %LOCALAPPDATA%\\Kai Agent\\copilot_models.json."""
     raw = await fetch_models_live()
     flat = [_normalise_model(m) for m in raw if m.get("id")]
     flat = [m for m in flat if m["type"] == "chat" and m["picker"]]
@@ -312,7 +312,7 @@ def cached_models() -> list[dict]:
             return blob.get("models", [])
         except Exception:
             pass
-    # Conservative fallback — gpt-4o-mini is free across all Copilot tiers
+    # Conservative fallback â€” gpt-4o-mini is free across all Copilot tiers
     # historically. The real list will replace this on first successful call.
     return [
         {"id": "gpt-4o-mini",       "label": "GPT-4o mini",       "vendor": "OpenAI",
@@ -345,13 +345,13 @@ def free_model_ids() -> list[str]:
 
 
 def pick_default_free_model() -> str:
-    """Best free model for Clicky — vision-capable, multiplier 0."""
+    """Best free model for Kai Agent â€” vision-capable, multiplier 0."""
     models = cached_models()
-    # Vision-capable AND free → ideal (Clicky sends screenshots)
+    # Vision-capable AND free â†’ ideal (Kai Agent sends screenshots)
     for m in models:
         if m["vision"] and m["multiplier"] == 0:
             return m["id"]
-    # Free-but-no-vision → still usable (ignores the screenshot)
+    # Free-but-no-vision â†’ still usable (ignores the screenshot)
     for m in models:
         if m["multiplier"] == 0:
             return m["id"]
@@ -360,12 +360,12 @@ def pick_default_free_model() -> str:
 
 
 def model_label(model_id: str) -> str:
-    """Pretty UI label: 'gpt-4o-mini  (free)' or 'claude-3.5-sonnet  (1×)'."""
+    """Pretty UI label: 'gpt-4o-mini  (free)' or 'claude-3.5-sonnet  (1Ã—)'."""
     for m in cached_models():
         if m["id"] == model_id:
             mult = m["multiplier"]
             tag = "free" if mult == 0 else (
-                f"{mult:g}×" if mult != 1 else "1× premium"
+                f"{mult:g}Ã—" if mult != 1 else "1Ã— premium"
             )
             return f"{model_id}  ({tag})"
     return model_id
@@ -378,7 +378,7 @@ def sorted_model_ids() -> list[str]:
     return [m["id"] for m in models]
 
 
-# ─── Provider ─────────────────────────────────────────────────────────────────
+# â”€â”€â”€ Provider â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class GitHubCopilotProvider(BaseLLMProvider):
 
@@ -406,8 +406,8 @@ class GitHubCopilotProvider(BaseLLMProvider):
         )
         if r.status_code == 401:
             raise RuntimeError(
-                "GitHub rejected your token. Sign in again: Tray → Model → "
-                "Sign in to GitHub Copilot…"
+                "GitHub rejected your token. Sign in again: Tray â†’ Model â†’ "
+                "Sign in to GitHub Copilotâ€¦"
             )
         if r.status_code == 403:
             body = (r.text or "")[:300]
@@ -419,7 +419,7 @@ class GitHubCopilotProvider(BaseLLMProvider):
         data = r.json()
         self._copilot_token = data["token"]
         self._copilot_token_expires = float(data.get("expires_at", time.time() + 1500))
-        # Useful flags for diagnostics — log if Chat is disabled on this seat
+        # Useful flags for diagnostics â€” log if Chat is disabled on this seat
         if data.get("chat_enabled") is False:
             raise RuntimeError(
                 "Copilot Chat is disabled on this seat. Enable it at "
@@ -435,7 +435,7 @@ class GitHubCopilotProvider(BaseLLMProvider):
         system_prompt: str,
         model: str | None = None,
     ) -> AsyncIterator[str]:
-        # Dynamic default — picks the best free + vision-capable model from
+        # Dynamic default â€” picks the best free + vision-capable model from
         # whatever GitHub currently exposes for this seat.
         model = model or pick_default_free_model()
 
@@ -478,13 +478,13 @@ class GitHubCopilotProvider(BaseLLMProvider):
                     if r.status_code == 400 and "model" in snippet.lower():
                         raise RuntimeError(
                             f"Copilot rejected model '{model}'. It may have been "
-                            f"removed by GitHub. Use Tray → Model → Refresh "
+                            f"removed by GitHub. Use Tray â†’ Model â†’ Refresh "
                             f"Copilot models. Server: {snippet}"
                         )
                     if r.status_code == 402:
                         raise RuntimeError(
                             f"Copilot says you've hit your premium-request quota. "
-                            f"Switch to a free model (Tray → Model). Server: {snippet}"
+                            f"Switch to a free model (Tray â†’ Model). Server: {snippet}"
                         )
                     if r.status_code == 403:
                         raise RuntimeError(
@@ -519,7 +519,7 @@ class GitHubCopilotProvider(BaseLLMProvider):
             return False
 
 
-# ─── CLI entry: `python -m ai.github_copilot_provider login` ──────────────────
+# â”€â”€â”€ CLI entry: `python -m ai.github_copilot_provider login` â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) >= 2 else ""
@@ -533,14 +533,14 @@ if __name__ == "__main__":
     elif cmd == "models":
         # Show what's currently cached
         for m in cached_models():
-            tag = "FREE" if m["multiplier"] == 0 else f"{m['multiplier']:g}× premium"
-            vision = "👁 " if m["vision"] else "   "
+            tag = "FREE" if m["multiplier"] == 0 else f"{m['multiplier']:g}Ã— premium"
+            vision = "ðŸ‘ " if m["vision"] else "   "
             print(f"  {vision}{m['id']:30s}  {tag:14s}  {m['vendor']}")
     elif cmd == "refresh":
         models = asyncio.run(refresh_models_to_cache())
-        print(f"Refreshed {len(models)} models → {_models_cache_path()}")
+        print(f"Refreshed {len(models)} models â†’ {_models_cache_path()}")
         for m in models:
-            tag = "FREE" if m["multiplier"] == 0 else f"{m['multiplier']:g}×"
+            tag = "FREE" if m["multiplier"] == 0 else f"{m['multiplier']:g}Ã—"
             print(f"  {m['id']:30s}  {tag}")
     elif cmd == "logout":
         for p in (_token_path(), _models_cache_path()):
@@ -549,3 +549,4 @@ if __name__ == "__main__":
                 print(f"removed {p}")
     else:
         print("Usage: python -m ai.github_copilot_provider [login|status|models|refresh|logout]")
+

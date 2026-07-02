@@ -1,4 +1,4 @@
-# Security Policy
+﻿# Security Policy
 
 ## Supported Versions
 
@@ -9,7 +9,7 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in Clicky, please report it responsibly.
+If you discover a security vulnerability in Kai Agent, please report it responsibly.
 
 **Do NOT open a public issue.** Instead, email:
 
@@ -30,8 +30,8 @@ Include:
 ## Scope
 
 The following are in scope:
-- The Clicky Windows application (`main.py` and all bundled modules)
-- The installer (`Setup-Clicky.exe`)
+- The Kai Agent Windows application (`main.py` and all bundled modules)
+- The installer (`Setup-Kai-Agent.exe`)
 - API key handling and `.env` file processing
 - Network requests made by the web search and AI provider modules
 
@@ -42,9 +42,11 @@ The following are out of scope:
 
 ## Security Design
 
-- **No telemetry** — Clicky sends zero data home. All usage stays on your machine.
-- **API keys stored locally** — keys live in `.env` in the install directory, never transmitted except to their intended provider.
-- **Local-first AI** — the default path uses Ollama (fully offline). Cloud providers are opt-in.
-- **No auto-update** — the app never phones home for updates. Users download new versions manually from GitHub Releases.
+- **No telemetry** â€” Kai Agent sends zero data home. All usage stays on your machine.
+- **API keys stored locally** â€” keys live in `.env` in the install directory, never transmitted except to their intended provider.
+- **Local-first AI** â€” the default path uses Ollama (fully offline). Cloud providers are opt-in.
+- **No auto-update** â€” the app never phones home for updates. Users download new versions manually from GitHub Releases.
 
-Thank you for helping keep Clicky safe for everyone.
+Thank you for helping keep Kai Agent safe for everyone.
+
+

@@ -1,5 +1,5 @@
-"""
-Skill system — user-defined voice triggers + custom behaviours.
+﻿"""
+Skill system â€” user-defined voice triggers + custom behaviours.
 
 Drop a .py file into this folder. Each file exposes a SKILL dict at module
 level:
@@ -7,12 +7,12 @@ level:
     SKILL = {
         "name":        "Self Mode",
         "trigger":     r"(self ?mode|allow ?clicks|enable ?clicking)",
-        "description": "Lets Clicky click for you instead of pointing.",
+        "description": "Lets Kai Agent click for you instead of pointing.",
         "handler":     handle_self_mode,   # async fn(manager, transcript) -> str
     }
 
 Loading happens at startup via load_all().  Triggers are tested *before*
-the LLM runs — same priority as built-in 'next' / 'stop' commands.
+the LLM runs â€” same priority as built-in 'next' / 'stop' commands.
 
 Status: loader + interface stable; ship your own skills here.
 """
@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
-# Skill dict shape (for type hints — using TypedDict would be stricter)
+# Skill dict shape (for type hints â€” using TypedDict would be stricter)
 # {
 #     "name":        str,
 #     "trigger":     str,           # regex
@@ -37,16 +37,16 @@ _loaded: list[dict] = []
 
 
 def _user_skills_dir() -> Path:
-    """User-level skills dir at ~/.clicky/skills/ — survives reinstall."""
-    return Path.home() / ".clicky" / "skills"
+    """User-level skills dir at ~/.kai_agent/skills/ â€” survives reinstall."""
+    return Path.home() / ".kai_agent" / "skills"
 
 
 def load_all() -> list[dict]:
-    """Discover + import every skill module in this package and ~/.clicky/skills."""
+    """Discover + import every skill module in this package and ~/.kai_agent/skills."""
     global _loaded
     _loaded = []
 
-    # Bundled skills (shipped with Clicky)
+    # Bundled skills (shipped with Kai Agent)
     here = Path(__file__).parent
     for f in here.glob("*.py"):
         if f.name.startswith("_"):
@@ -65,7 +65,7 @@ def load_all() -> list[dict]:
 def _try_import(path: Path) -> None:
     try:
         spec = importlib.util.spec_from_file_location(
-            f"clicky_skill_{path.stem}", str(path)
+            f"kai_agent_skill_{path.stem}", str(path)
         )
         if not spec or not spec.loader:
             return
@@ -95,3 +95,4 @@ def match(transcript: str) -> Optional[dict]:
 
 def list_skills() -> list[dict]:
     return list(_loaded)
+

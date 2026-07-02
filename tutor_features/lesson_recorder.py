@@ -1,11 +1,11 @@
-"""
+﻿"""
 Lesson recording.
 
-Captures Clicky lessons as:
-  • MP4 video — primary monitor, 8 fps, Clicky's pointer overlaid
-  • Markdown transcript — Q&A + timestamps next to the video
+Captures Kai Agent lessons as:
+  â€¢ MP4 video â€” primary monitor, 8 fps, Kai Agent's pointer overlaid
+  â€¢ Markdown transcript â€” Q&A + timestamps next to the video
 
-Output:  ~/Documents/Clicky Lessons/<timestamp>/
+Output:  ~/Documents/Kai Agent Lessons/<timestamp>/
 
 Backend: imageio-ffmpeg (auto-bundles ffmpeg, no system install needed).
 """
@@ -38,7 +38,7 @@ class LessonRecorder:
         self._out_dir: Optional[Path] = None
         self.is_recording = False
 
-    # ── Lifecycle ───────────────────────────────────────────────────────────
+    # â”€â”€ Lifecycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def start(self) -> Optional[Path]:
         """Begin recording. Returns the output directory or None on failure."""
@@ -52,7 +52,7 @@ class LessonRecorder:
             return None
 
         ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        self._out_dir = Path.home() / "Documents" / "Clicky Lessons" / ts
+        self._out_dir = Path.home() / "Documents" / "Kai Agent Lessons" / ts
         self._out_dir.mkdir(parents=True, exist_ok=True)
 
         with mss.mss() as sct:
@@ -66,7 +66,7 @@ class LessonRecorder:
             quality=7,
             macro_block_size=None,
         )
-        self._md_lines = [f"# Clicky Lesson — {ts}", ""]
+        self._md_lines = [f"# Kai Agent Lesson â€” {ts}", ""]
         self._t0 = time.monotonic()
         self._stop_evt.clear()
         self.is_recording = True
@@ -95,7 +95,7 @@ class LessonRecorder:
         self.is_recording = False
         return self._out_dir
 
-    # ── Transcript hooks (manager calls these) ──────────────────────────────
+    # â”€â”€ Transcript hooks (manager calls these) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def log_question(self, q: str):
         if self.is_recording:
@@ -106,7 +106,7 @@ class LessonRecorder:
         if self.is_recording:
             self._md_lines.append(f"**A:** {a.strip()}\n")
 
-    # ── Internal ────────────────────────────────────────────────────────────
+    # â”€â”€ Internal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _loop(self):
         with mss.mss() as sct:
@@ -132,3 +132,4 @@ class LessonRecorder:
 def _to_array(img: Image.Image):
     import numpy as np
     return np.array(img)
+

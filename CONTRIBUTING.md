@@ -1,14 +1,14 @@
-# Contributing to Clicky
+﻿# Contributing to Kai Agent
 
-Thanks for your interest in contributing to Clicky! This guide will help you get started.
+Thanks for your interest in contributing to Kai Agent! This guide will help you get started.
 
 ## Getting Started
 
 1. **Fork** the repository on GitHub
 2. **Clone** your fork locally:
    ```bash
-   git clone https://github.com/<your-username>/clicky-windows.git
-   cd clicky-windows
+   git clone https://github.com/<your-username>/kai-agent.git
+   cd kai-agent
    ```
 3. **Create a virtual environment** (Python 3.11+):
    ```bash
@@ -55,7 +55,7 @@ We follow a lightweight conventional format:
 ## Project Structure
 
 ```
-clicky-windows/
+kai-agent/
   main.py                  # Entry point
   companion_manager.py     # Core AI orchestration
   config.py                # Settings & env loading
@@ -71,11 +71,11 @@ clicky-windows/
 
 ## What to Contribute
 
-- **Bug fixes** — check the [Issues](https://github.com/Bitshank-2338/clicky-windows/issues) tab
-- **New AI providers** — add a new file in `ai/` implementing `BaseLLMProvider`
-- **New TTS/STT engines** — add in `audio/tts/` or `audio/stt/`
-- **UI improvements** — overlay and tray live in `ui/`
-- **Documentation** — README, setup guides, tutorials
+- **Bug fixes** â€” check the [Issues](https://github.com/Bitshank-2338/kai-agent/issues) tab
+- **New AI providers** â€” add a new file in `ai/` implementing `BaseLLMProvider`
+- **New TTS/STT engines** â€” add in `audio/tts/` or `audio/stt/`
+- **UI improvements** â€” overlay and tray live in `ui/`
+- **Documentation** â€” README, setup guides, tutorials
 
 ## Code Style
 
@@ -95,4 +95,5 @@ Open an issue with:
 
 ## Questions?
 
-Open a [Discussion](https://github.com/Bitshank-2338/clicky-windows/discussions) or reach out at **shashanksingh2338@gmail.com**.
+Open a [Discussion](https://github.com/Bitshank-2338/kai-agent/discussions) or reach out at **shashanksingh2338@gmail.com**.
+

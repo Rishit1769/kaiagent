@@ -1,23 +1,23 @@
-# -*- mode: python ; coding: utf-8 -*-
+﻿# -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller spec for Clicky Windows.
+PyInstaller spec for Kai Agent Windows.
 
 Build:
-    pyinstaller clicky.spec --clean --noconfirm
+    pyinstaller kai_agent.spec --clean --noconfirm
 
 Output:
-    dist/Clicky/Clicky.exe           ← distribute this whole folder
+    dist/Kai Agent/Kai Agent.exe           â† distribute this whole folder
 
 We use --onedir (not --onefile) because:
-  • faster-whisper + ctranslate2 ship large native DLLs that onefile
+  â€¢ faster-whisper + ctranslate2 ship large native DLLs that onefile
     extracts to %TEMP% on every launch (slow, antivirus-triggering).
-  • onedir launches in ~1s vs ~8s for onefile.
-  • Inno Setup bundles the folder into a single Setup.exe anyway.
+  â€¢ onedir launches in ~1s vs ~8s for onefile.
+  â€¢ Inno Setup bundles the folder into a single Setup.exe anyway.
 """
 
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
-# ── Modules that are lazy-imported by CompanionManager — PyInstaller's
+# â”€â”€ Modules that are lazy-imported by CompanionManager â€” PyInstaller's
 #    static analysis misses them, so we list them explicitly.
 hidden = [
     # Lazy LLM providers
@@ -50,7 +50,7 @@ hidden = [
     "tiktoken_ext.openai_public",
 ]
 
-# ── Heavy packages that ship non-Python assets (DLLs, JSON, voices).
+# â”€â”€ Heavy packages that ship non-Python assets (DLLs, JSON, voices).
 #    collect_all grabs submodules + data files + binaries + metadata.
 datas, binaries, hiddenimports = [], [], []
 for pkg in (
@@ -73,7 +73,7 @@ for pkg in (
         binaries += b
         hiddenimports += h
     except Exception:
-        pass  # package not installed — that path is optional anyway
+        pass  # package not installed â€” that path is optional anyway
 
 hiddenimports += hidden
 hiddenimports += collect_submodules("PyQt6")
@@ -88,7 +88,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    # Shave size: Clicky never uses these heavy libs.
+    # Shave size: Kai Agent never uses these heavy libs.
     excludes=[
         "matplotlib", "scipy", "pandas", "tkinter",
         "notebook", "jupyter", "IPython",
@@ -104,7 +104,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="Clicky",
+    name="Kai Agent",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -125,5 +125,6 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name="Clicky",
+    name="Kai Agent",
 )
+

@@ -1,12 +1,12 @@
-"""
+﻿"""
 PDF / document context.
 
-Drag a PDF onto the Clicky panel → its text is extracted and held as context
+Drag a PDF onto the Kai Agent panel â†’ its text is extracted and held as context
 for the next question. *"Explain page 3 of my chemistry notes"* works because
 the extracted text is appended to the system prompt.
 
 Backend: pypdf (pure Python, no native deps). For .docx use python-docx.
-For .txt / .md we just read the file. Anything else → plain bytes preview.
+For .txt / .md we just read the file. Anything else â†’ plain bytes preview.
 """
 
 from __future__ import annotations
@@ -68,7 +68,7 @@ def extract_text(path: str | Path) -> str:
         except Exception as e:
             return f"(failed to read DOCX: {e})"
 
-    # Unknown file type — return a summary
+    # Unknown file type â€” return a summary
     try:
         size_kb = p.stat().st_size / 1024
         return f"[Unsupported file type: {suf or 'no extension'}, {size_kb:.0f} KB]"
@@ -86,3 +86,4 @@ def format_for_prompt(filename: str, text: str) -> str:
         "When the user asks about 'this PDF' / 'my notes' / 'page X', refer to "
         "the document above. Cite page numbers when present."
     )
+
