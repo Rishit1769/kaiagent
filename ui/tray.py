@@ -1,13 +1,13 @@
-﻿from PyQt6.QtWidgets import QSystemTrayIcon, QMenu
-from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QBrush
-from PyQt6.QtCore import Qt, QSize, pyqtSignal, QObject
+# -*- coding: utf-8 -*-
+from PyQt6.QtCore import QObject, QSize, Qt, pyqtSignal
+from PyQt6.QtGui import QBrush, QColor, QIcon, QPainter, QPixmap
+from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
 
 from config import cfg
 
 
 def _make_tray_icon(color: QColor) -> QIcon:
-    """Generate a simple coloured circle as the tray icon.
-    Must be called AFTER QApplication exists (Qt requirement)."""
+    """Generate a simple colored circle as the tray icon."""
     px = QPixmap(QSize(22, 22))
     px.fill(Qt.GlobalColor.transparent)
     painter = QPainter(px)
@@ -22,52 +22,49 @@ def _make_tray_icon(color: QColor) -> QIcon:
 class TrayManager(QObject):
     """Windows system tray icon and context menu."""
 
-    on_show_panel         = pyqtSignal()
-    on_hide_panel         = pyqtSignal()
-    on_quit               = pyqtSignal()
-    on_toggle_search      = pyqtSignal(bool)
-    on_toggle_wake_word   = pyqtSignal(bool)
-    on_toggle_slow_mode   = pyqtSignal(bool)
-    on_toggle_quiz_mode   = pyqtSignal(bool)
-    on_toggle_privacy     = pyqtSignal(bool)
-    on_switch_provider    = pyqtSignal(str)     # "claude" | "openai" | "copilot" | ...
-    on_copilot_login      = pyqtSignal()
-    on_copilot_refresh    = pyqtSignal()
-    on_ollama_set_model   = pyqtSignal(str, str)   # (kind, name): kind = "vision" | "text"
-    on_ollama_pull        = pyqtSignal(str)        # model name
-    on_ollama_refresh     = pyqtSignal()
-    on_stop               = pyqtSignal()
-    on_toggle_code_mode   = pyqtSignal(bool)
-    on_toggle_multilang   = pyqtSignal(bool)
-    on_toggle_journal     = pyqtSignal(bool)
-    on_toggle_ocr         = pyqtSignal(bool)
-    on_record_start       = pyqtSignal()
-    on_record_stop        = pyqtSignal()
-    on_collab_start       = pyqtSignal()
-    on_collab_join        = pyqtSignal()
-    on_workflow_start     = pyqtSignal()
-    on_workflow_stop      = pyqtSignal()
-    on_journal_open       = pyqtSignal()
-    on_attach_doc         = pyqtSignal()
-    on_run_setup          = pyqtSignal()
-    on_diagnostics        = pyqtSignal()
+    on_show_panel = pyqtSignal()
+    on_hide_panel = pyqtSignal()
+    on_quit = pyqtSignal()
+    on_toggle_search = pyqtSignal(bool)
+    on_toggle_wake_word = pyqtSignal(bool)
+    on_toggle_slow_mode = pyqtSignal(bool)
+    on_toggle_quiz_mode = pyqtSignal(bool)
+    on_toggle_privacy = pyqtSignal(bool)
+    on_switch_provider = pyqtSignal(str)
+    on_copilot_login = pyqtSignal()
+    on_copilot_refresh = pyqtSignal()
+    on_ollama_set_model = pyqtSignal(str, str)
+    on_ollama_pull = pyqtSignal(str)
+    on_ollama_refresh = pyqtSignal()
+    on_stop = pyqtSignal()
+    on_toggle_code_mode = pyqtSignal(bool)
+    on_toggle_multilang = pyqtSignal(bool)
+    on_toggle_journal = pyqtSignal(bool)
+    on_toggle_ocr = pyqtSignal(bool)
+    on_record_start = pyqtSignal()
+    on_record_stop = pyqtSignal()
+    on_collab_start = pyqtSignal()
+    on_collab_join = pyqtSignal()
+    on_workflow_start = pyqtSignal()
+    on_workflow_stop = pyqtSignal()
+    on_journal_open = pyqtSignal()
+    on_attach_doc = pyqtSignal()
+    on_run_setup = pyqtSignal()
+    on_diagnostics = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
-
-        # Icons MUST be created after QApplication exists
         self._icons = {
-            "idle":      _make_tray_icon(QColor(80, 80, 120)),
+            "idle": _make_tray_icon(QColor(80, 80, 120)),
             "listening": _make_tray_icon(QColor(50, 200, 100)),
-            "thinking":  _make_tray_icon(QColor(0, 120, 255)),
-            "speaking":  _make_tray_icon(QColor(255, 140, 0)),
+            "thinking": _make_tray_icon(QColor(0, 120, 255)),
+            "speaking": _make_tray_icon(QColor(255, 140, 0)),
         }
 
         self._tray = QSystemTrayIcon()
         self._tray.setIcon(self._icons["idle"])
-        self._tray.setToolTip(
-            f"Kai Agent\nHold {cfg.hotkey} to speak"
-        )
+        self._tray.setToolTip(f"Kai Agent\nHold {cfg.hotkey} to speak")
+
         self._search_enabled = True
         self._wake_enabled = True
         self._slow_enabled = False
@@ -78,8 +75,6 @@ class TrayManager(QObject):
         self._journal_enabled = True
         self._ocr_enabled = True
         self._is_recording = False
-
-        # Ollama model state â€” populated by manager via set_ollama_models()
         self._ollama_installed: dict[str, list[str]] = {"vision": [], "text": []}
 
         self._build_menu()
@@ -102,200 +97,169 @@ class TrayManager(QObject):
         info.setEnabled(False)
         menu.addSeparator()
 
-        show_action = menu.addAction("Show Panel")
-        show_action.triggered.connect(self.on_show_panel)
-
-        hide_action = menu.addAction("Hide Panel")
-        hide_action.triggered.connect(self.on_hide_panel)
-
-        stop_action = menu.addAction("Stop (Esc)")
-        stop_action.triggered.connect(self.on_stop)
-
+        menu.addAction("Show Panel").triggered.connect(self.on_show_panel)
+        menu.addAction("Hide Panel").triggered.connect(self.on_hide_panel)
+        menu.addAction("Stop (Esc)").triggered.connect(self.on_stop)
         menu.addSeparator()
 
-        # Model switcher submenu
         switch_menu = menu.addMenu(f"Model: {providers['llm']}")
-        active = providers['llm']
+        active = providers["llm"]
         for name in cfg.available_llm_providers():
-            label = f"â— {name}" if name == active else f"  {name}"
-            act = switch_menu.addAction(label)
-            act.triggered.connect(lambda _=False, n=name: self.on_switch_provider.emit(n))
+            label = f"* {name}" if name == active else f"  {name}"
+            switch_menu.addAction(label).triggered.connect(
+                lambda _=False, n=name: self.on_switch_provider.emit(n)
+            )
         switch_menu.addSeparator()
-        login_act = switch_menu.addAction("Sign in to GitHub Copilotâ€¦")
-        login_act.triggered.connect(self.on_copilot_login)
-        refresh_act = switch_menu.addAction("Refresh Copilot models")
-        refresh_act.triggered.connect(self.on_copilot_refresh)
+        switch_menu.addAction("Sign in to GitHub Copilot...").triggered.connect(
+            self.on_copilot_login
+        )
+        switch_menu.addAction("Refresh Copilot models").triggered.connect(
+            self.on_copilot_refresh
+        )
 
-        # â”€â”€ Ollama-specific submenu (always visible â€” Ollama is the offline fallback) â”€â”€
         self._build_ollama_submenu(menu, providers)
-
         menu.addSeparator()
 
-        search_action = menu.addAction(
+        self._search_action = menu.addAction(
             "Web Search: ON" if self._search_enabled else "Web Search: OFF"
         )
-        search_action.setCheckable(True)
-        search_action.setChecked(self._search_enabled)
-        search_action.triggered.connect(self._toggle_search)
-        self._search_action = search_action
+        self._search_action.setCheckable(True)
+        self._search_action.setChecked(self._search_enabled)
+        self._search_action.triggered.connect(self._toggle_search)
 
-        wake_action = menu.addAction(
-            "Wake word 'Kai Agent': ON" if self._wake_enabled else "Wake word 'Kai Agent': OFF"
+        self._wake_action = menu.addAction(
+            "Wake word 'Kai Agent': ON"
+            if self._wake_enabled
+            else "Wake word 'Kai Agent': OFF"
         )
-        wake_action.setCheckable(True)
-        wake_action.setChecked(self._wake_enabled)
-        wake_action.triggered.connect(self._toggle_wake)
-        self._wake_action = wake_action
+        self._wake_action.setCheckable(True)
+        self._wake_action.setChecked(self._wake_enabled)
+        self._wake_action.triggered.connect(self._toggle_wake)
 
-        # â”€â”€ Tutor toggles â”€â”€
         menu.addSeparator()
         tutor_menu = menu.addMenu("Tutor Mode")
 
-        slow_action = tutor_menu.addAction(
-            "Slow Mode (teacher pace): ON" if self._slow_enabled
+        self._slow_action = tutor_menu.addAction(
+            "Slow Mode (teacher pace): ON"
+            if self._slow_enabled
             else "Slow Mode (teacher pace): OFF"
         )
-        slow_action.setCheckable(True)
-        slow_action.setChecked(self._slow_enabled)
-        slow_action.triggered.connect(self._toggle_slow)
-        self._slow_action = slow_action
+        self._slow_action.setCheckable(True)
+        self._slow_action.setChecked(self._slow_enabled)
+        self._slow_action.triggered.connect(self._toggle_slow)
 
-        quiz_action = tutor_menu.addAction(
+        self._quiz_action = tutor_menu.addAction(
             "Quiz Mode: ON" if self._quiz_enabled else "Quiz Mode: OFF"
         )
-        quiz_action.setCheckable(True)
-        quiz_action.setChecked(self._quiz_enabled)
-        quiz_action.triggered.connect(self._toggle_quiz)
-        self._quiz_action = quiz_action
+        self._quiz_action.setCheckable(True)
+        self._quiz_action.setChecked(self._quiz_enabled)
+        self._quiz_action.triggered.connect(self._toggle_quiz)
 
-        privacy_action = tutor_menu.addAction(
-            "Privacy Guard: ON" if self._privacy_enabled
+        self._privacy_action = tutor_menu.addAction(
+            "Privacy Guard: ON"
+            if self._privacy_enabled
             else "Privacy Guard: OFF"
         )
-        privacy_action.setCheckable(True)
-        privacy_action.setChecked(self._privacy_enabled)
-        privacy_action.triggered.connect(self._toggle_privacy)
-        self._privacy_action = privacy_action
+        self._privacy_action.setCheckable(True)
+        self._privacy_action.setChecked(self._privacy_enabled)
+        self._privacy_action.triggered.connect(self._toggle_privacy)
 
-        code_action = tutor_menu.addAction(
+        self._code_action = tutor_menu.addAction(
             "Code Mode (auto): ON" if self._code_enabled else "Code Mode (auto): OFF"
         )
-        code_action.setCheckable(True)
-        code_action.setChecked(self._code_enabled)
-        code_action.triggered.connect(self._toggle_code)
-        self._code_action = code_action
+        self._code_action.setCheckable(True)
+        self._code_action.setChecked(self._code_enabled)
+        self._code_action.triggered.connect(self._toggle_code)
 
-        ml_action = tutor_menu.addAction(
+        self._ml_action = tutor_menu.addAction(
             "Multilingual: ON" if self._multilang_enabled else "Multilingual: OFF"
         )
-        ml_action.setCheckable(True)
-        ml_action.setChecked(self._multilang_enabled)
-        ml_action.triggered.connect(self._toggle_multilang)
-        self._ml_action = ml_action
+        self._ml_action.setCheckable(True)
+        self._ml_action.setChecked(self._multilang_enabled)
+        self._ml_action.triggered.connect(self._toggle_multilang)
 
-        ocr_action = tutor_menu.addAction(
+        self._ocr_action = tutor_menu.addAction(
             "OCR Fallback: ON" if self._ocr_enabled else "OCR Fallback: OFF"
         )
-        ocr_action.setCheckable(True)
-        ocr_action.setChecked(self._ocr_enabled)
-        ocr_action.triggered.connect(self._toggle_ocr)
-        self._ocr_action = ocr_action
+        self._ocr_action.setCheckable(True)
+        self._ocr_action.setChecked(self._ocr_enabled)
+        self._ocr_action.triggered.connect(self._toggle_ocr)
 
-        # â”€â”€ Journal â”€â”€
         menu.addSeparator()
         journal_menu = menu.addMenu("Journal")
 
-        journal_action = journal_menu.addAction(
+        self._journal_action = journal_menu.addAction(
             "Logging: ON" if self._journal_enabled else "Logging: OFF"
         )
-        journal_action.setCheckable(True)
-        journal_action.setChecked(self._journal_enabled)
-        journal_action.triggered.connect(self._toggle_journal)
-        self._journal_action = journal_action
+        self._journal_action.setCheckable(True)
+        self._journal_action.setChecked(self._journal_enabled)
+        self._journal_action.triggered.connect(self._toggle_journal)
 
-        open_journal = journal_menu.addAction("Open journal folder")
-        open_journal.triggered.connect(self.on_journal_open)
+        journal_menu.addAction("Open journal folder").triggered.connect(
+            self.on_journal_open
+        )
+        journal_menu.addAction("Attach document (PDF / TXT / DOCX)...").triggered.connect(
+            self.on_attach_doc
+        )
 
-        attach = journal_menu.addAction("Attach document (PDF / TXT / DOCX)â€¦")
-        attach.triggered.connect(self.on_attach_doc)
-
-        # â”€â”€ Recording â”€â”€
         rec_menu = menu.addMenu("Lesson Recording")
         if self._is_recording:
-            stop_rec = rec_menu.addAction("â— Stop recording")
-            stop_rec.triggered.connect(self.on_record_stop)
+            rec_menu.addAction("\u25cf Stop recording").triggered.connect(
+                self.on_record_stop
+            )
         else:
-            start_rec = rec_menu.addAction("Start recording")
-            start_rec.triggered.connect(self.on_record_start)
+            rec_menu.addAction("Start recording").triggered.connect(
+                self.on_record_start
+            )
 
-        # â”€â”€ Workflow capture â”€â”€
         wf_menu = menu.addMenu("Workflow Capture")
-        wf_start = wf_menu.addAction("Start capturing my clicks")
-        wf_start.triggered.connect(self.on_workflow_start)
-        wf_stop  = wf_menu.addAction("Stop + send to Kai Agent")
-        wf_stop.triggered.connect(self.on_workflow_stop)
-
-        # â”€â”€ Live collaboration â”€â”€
-        # NOTE: WebRTC signalling server isn't shipped yet, so this whole
-        # menu is hidden until tutor_features/collab.py gets a real backend.
-        # The signals are still defined on this object so any existing
-        # bindings in main.py don't crash on connect().
-        # collab_menu = menu.addMenu("Live Session")  # disabled in this build
-        # host = collab_menu.addAction("Start hosting")
-        # host.triggered.connect(self.on_collab_start)
-        # join = collab_menu.addAction("Join with codeâ€¦")
-        # join.triggered.connect(self.on_collab_join)
+        wf_menu.addAction("Start capturing my clicks").triggered.connect(
+            self.on_workflow_start
+        )
+        wf_menu.addAction("Stop + send to Kai Agent").triggered.connect(
+            self.on_workflow_stop
+        )
 
         menu.addSeparator()
-
-        # â”€â”€ Setup / Diagnostics â”€â”€
         setup_menu = menu.addMenu("Setup && Diagnostics")
-        run_setup = setup_menu.addAction("Run setup wizard againâ€¦")
-        run_setup.triggered.connect(self.on_run_setup)
-        diag = setup_menu.addAction("Save diagnostics reportâ€¦")
-        diag.triggered.connect(self.on_diagnostics)
+        setup_menu.addAction("Run setup wizard again...").triggered.connect(
+            self.on_run_setup
+        )
+        setup_menu.addAction("Save diagnostics report...").triggered.connect(
+            self.on_diagnostics
+        )
 
         menu.addSeparator()
-
-        quit_action = menu.addAction("Quit Kai Agent")
-        quit_action.triggered.connect(self.on_quit)
+        menu.addAction("Quit Kai Agent").triggered.connect(self.on_quit)
 
         self._tray.setContextMenu(menu)
-        # Keep refs to prevent GC
         self._menu = menu
 
     def _build_ollama_submenu(self, parent_menu: QMenu, providers: dict):
-        """Vision/Text model pickers + 'Pull recommended' for Ollama."""
-        from ai.ollama_models_registry import (
-            RECOMMENDED_VISION, RECOMMENDED_TEXT,
-        )
+        from ai.ollama_models_registry import RECOMMENDED_TEXT, RECOMMENDED_VISION
 
         ol_menu = parent_menu.addMenu("Ollama")
         active_vision = providers.get("ollama_vision_model", "")
-        active_text   = providers.get("ollama_text_model", "")
+        active_text = providers.get("ollama_text_model", "")
 
-        # â”€ Vision model picker â”€
         v_menu = ol_menu.addMenu(f"Vision model: {active_vision or '(none)'}")
         installed_vision = self._ollama_installed.get("vision", [])
         if installed_vision:
             for name in installed_vision:
-                label = f"â— {name}" if name == active_vision else f"  {name}"
-                act = v_menu.addAction(label)
-                act.triggered.connect(
+                label = f"* {name}" if name == active_vision else f"  {name}"
+                v_menu.addAction(label).triggered.connect(
                     lambda _=False, n=name: self.on_ollama_set_model.emit("vision", n)
                 )
         else:
             empty = v_menu.addAction("(no vision models installed)")
             empty.setEnabled(False)
 
-        # â”€ Text model picker â”€
         t_menu = ol_menu.addMenu(f"Text model: {active_text or '(none)'}")
         installed_text = self._ollama_installed.get("text", [])
         if installed_text:
             for name in installed_text:
-                label = f"â— {name}" if name == active_text else f"  {name}"
-                act = t_menu.addAction(label)
-                act.triggered.connect(
+                label = f"* {name}" if name == active_text else f"  {name}"
+                t_menu.addAction(label).triggered.connect(
                     lambda _=False, n=name: self.on_ollama_set_model.emit("text", n)
                 )
         else:
@@ -303,19 +267,19 @@ class TrayManager(QObject):
             empty.setEnabled(False)
 
         ol_menu.addSeparator()
-
-        # â”€ Pull recommended â”€
-        pull_menu = ol_menu.addMenu("Pull recommendedâ€¦")
+        pull_menu = ol_menu.addMenu("Pull recommended...")
         already = set(installed_vision) | set(installed_text)
 
         def _add_recs(rec_list, header):
             hdr = pull_menu.addAction(header)
             hdr.setEnabled(False)
             for rec in rec_list:
-                # Mark already-installed entries (matching by tag prefix)
-                installed = any(n == rec.name or n.startswith(rec.name.split(":")[0] + ":") for n in already)
-                tag = "âœ“ " if installed else "  "
-                label = f"{tag}{rec.label}  Â·  {rec.size}  â€”  {rec.blurb}"
+                installed = any(
+                    n == rec.name or n.startswith(rec.name.split(":")[0] + ":")
+                    for n in already
+                )
+                tag = "\u2714 " if installed else "  "
+                label = f"{tag}{rec.label}  -  {rec.size}  -  {rec.blurb}"
                 act = pull_menu.addAction(label)
                 if installed:
                     act.setEnabled(False)
@@ -324,19 +288,19 @@ class TrayManager(QObject):
                         lambda _=False, n=rec.name: self.on_ollama_pull.emit(n)
                     )
 
-        _add_recs(RECOMMENDED_VISION, "â”€â”€ Vision â”€â”€")
+        _add_recs(RECOMMENDED_VISION, "Vision")
         pull_menu.addSeparator()
-        _add_recs(RECOMMENDED_TEXT, "â”€â”€ Text â”€â”€")
+        _add_recs(RECOMMENDED_TEXT, "Text")
 
         ol_menu.addSeparator()
-        refresh_act = ol_menu.addAction("Refresh installed models")
-        refresh_act.triggered.connect(self.on_ollama_refresh)
+        ol_menu.addAction("Refresh installed models").triggered.connect(
+            self.on_ollama_refresh
+        )
 
     def set_ollama_models(self, classified: dict):
-        """Called by the manager after polling /api/tags. Triggers menu rebuild."""
         self._ollama_installed = {
             "vision": list(classified.get("vision", [])),
-            "text":   list(classified.get("text", [])),
+            "text": list(classified.get("text", [])),
         }
         self.rebuild_menu()
 
@@ -346,31 +310,30 @@ class TrayManager(QObject):
 
     def _toggle_search(self, checked: bool):
         self._search_enabled = checked
-        self._search_action.setText(
-            "Web Search: ON" if checked else "Web Search: OFF"
-        )
+        self._search_action.setText("Web Search: ON" if checked else "Web Search: OFF")
         self.on_toggle_search.emit(checked)
 
     def _toggle_wake(self, checked: bool):
         self._wake_enabled = checked
         self._wake_action.setText(
-            "Wake word 'Kai Agent': ON" if checked else "Wake word 'Kai Agent': OFF"
+            "Wake word 'Kai Agent': ON"
+            if checked
+            else "Wake word 'Kai Agent': OFF"
         )
         self.on_toggle_wake_word.emit(checked)
 
     def _toggle_slow(self, checked: bool):
         self._slow_enabled = checked
         self._slow_action.setText(
-            "Slow Mode (teacher pace): ON" if checked
+            "Slow Mode (teacher pace): ON"
+            if checked
             else "Slow Mode (teacher pace): OFF"
         )
         self.on_toggle_slow_mode.emit(checked)
 
     def _toggle_quiz(self, checked: bool):
         self._quiz_enabled = checked
-        self._quiz_action.setText(
-            "Quiz Mode: ON" if checked else "Quiz Mode: OFF"
-        )
+        self._quiz_action.setText("Quiz Mode: ON" if checked else "Quiz Mode: OFF")
         self.on_toggle_quiz_mode.emit(checked)
 
     def _toggle_privacy(self, checked: bool):
@@ -403,9 +366,7 @@ class TrayManager(QObject):
 
     def _toggle_journal(self, checked: bool):
         self._journal_enabled = checked
-        self._journal_action.setText(
-            "Logging: ON" if checked else "Logging: OFF"
-        )
+        self._journal_action.setText("Logging: ON" if checked else "Logging: OFF")
         self.on_toggle_journal.emit(checked)
 
     def set_recording_state(self, on: bool):
@@ -416,7 +377,6 @@ class TrayManager(QObject):
         self._tray.setIcon(self._icons.get(state, self._icons["idle"]))
 
     def rebuild_menu(self):
-        """Rebuild so the Model submenu reflects the newly-active provider."""
         self._build_menu()
 
     def show_notification(self, title: str, message: str):
@@ -427,4 +387,3 @@ class TrayManager(QObject):
     @property
     def search_enabled(self) -> bool:
         return self._search_enabled
-

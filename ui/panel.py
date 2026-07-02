@@ -1,42 +1,57 @@
-﻿import asyncio
+# -*- coding: utf-8 -*-
+import asyncio
 from enum import Enum, auto
-from typing import Callable, Optional
 
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QBrush, QColor, QPainter, QPen
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QScrollArea, QSizePolicy, QComboBox, QFrame
+    QComboBox,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QPropertyAnimation, QEasingCurve
-from PyQt6.QtGui import QColor, QPainter, QPen, QBrush, QFont, QCursor
 
-from ui.design import (
-    PANEL_QSS, PANEL_WIDTH, PANEL_HEIGHT, PANEL_RADIUS,
-    STATE_IDLE, STATE_LISTENING, STATE_THINKING, STATE_SPEAKING,
-    FONT_TITLE, FONT_STATUS, FONT_RESPONSE, FONT_LABEL,
-    SURFACE, TEXT_SECONDARY, BORDER, ANIM_FAST_MS
-)
 from config import cfg
+from ui.design import (
+    FONT_LABEL,
+    FONT_RESPONSE,
+    FONT_STATUS,
+    FONT_TITLE,
+    PANEL_HEIGHT,
+    PANEL_QSS,
+    PANEL_RADIUS,
+    PANEL_WIDTH,
+    STATE_IDLE,
+    STATE_LISTENING,
+    STATE_SPEAKING,
+    STATE_THINKING,
+)
 
 
 class AppState(Enum):
-    IDLE      = auto()
+    IDLE = auto()
     LISTENING = auto()
-    THINKING  = auto()
-    SPEAKING  = auto()
+    THINKING = auto()
+    SPEAKING = auto()
 
 
 STATE_LABELS = {
-    AppState.IDLE:      "Say 'Kai Agent' or Ctrl+Alt+Space",
+    AppState.IDLE: "Say 'Kai Agent' or Ctrl+Alt+Space",
     AppState.LISTENING: "Listening...",
-    AppState.THINKING:  "Thinking...",
-    AppState.SPEAKING:  "Speaking...",
+    AppState.THINKING: "Thinking...",
+    AppState.SPEAKING: "Speaking...",
 }
 
 STATE_COLORS = {
-    AppState.IDLE:      STATE_IDLE,
+    AppState.IDLE: STATE_IDLE,
     AppState.LISTENING: STATE_LISTENING,
-    AppState.THINKING:  STATE_THINKING,
-    AppState.SPEAKING:  STATE_SPEAKING,
+    AppState.THINKING: STATE_THINKING,
+    AppState.SPEAKING: STATE_SPEAKING,
 }
 
 
@@ -52,8 +67,12 @@ class WaveformWidget(QWidget):
 
     def set_level(self, rms: float):
         import random
+
         peak = min(1.0, rms * 3)
-        self._levels = [min(1.0, peak * (0.4 + random.random() * 0.6)) for _ in self._levels]
+        self._levels = [
+            min(1.0, peak * (0.4 + random.random() * 0.6))
+            for _ in self._levels
+        ]
         self.update()
 
     def _decay(self):
@@ -87,35 +106,23 @@ class WaveformWidget(QWidget):
 
 
 PROVIDER_LABELS = {
-    "claude":  "Claude",
-    "openai":  "GPT-4o",
-    "gemini":  "Gemini",
+    "claude": "Claude",
+    "openai": "GPT-4o",
+    "gemini": "Gemini",
     "copilot": "Copilot",
-    "ollama":  f"Ollama ({cfg.ollama_model})",
+    "ollama": f"Ollama ({cfg.ollama_model})",
 }
-
-# Provider model lists are fetched live from each vendor's /models endpoint
-# (see ai/model_registry.py for Claude/OpenAI/Gemini and
-# ai/github_copilot_provider.py for Copilot). The hardcoded lists below are
-# only used as offline fallbacks when no cache exists yet.
 
 
 def _copilot_model_choices() -> list[tuple[str, str]]:
-    """Returns [(model_id, display_label), ...] for the dropdown.
-    Free models first, then ascending multiplier. Display shows '(free)' /
-    '(1Ã—)' so the user always knows what burns premium quota."""
+    """Return [(model_id, display_label), ...] for the dropdown."""
     try:
-        from ai.github_copilot_provider import (
-            cached_models, sorted_model_ids, model_label,
-        )
+        from ai.github_copilot_provider import model_label, sorted_model_ids
     except Exception:
         return [("gpt-4o-mini", "gpt-4o-mini  (free)")]
-    out = []
-    for mid in sorted_model_ids():
-        out.append((mid, model_label(mid)))
-    if not out:
-        out.append(("gpt-4o-mini", "gpt-4o-mini  (free)"))
-    return out
+
+    out = [(mid, model_label(mid)) for mid in sorted_model_ids()]
+    return out or [("gpt-4o-mini", "gpt-4o-mini  (free)")]
 
 
 class ProviderBadge(QLabel):
@@ -134,14 +141,14 @@ class ProviderBadge(QLabel):
 
 
 class CompanionPanel(QWidget):
-    """Floating companion control panel â€” equivalent to CompanionPanelView.swift."""
+    """Floating companion control panel."""
 
-    on_push_to_talk_pressed  = pyqtSignal()
+    on_push_to_talk_pressed = pyqtSignal()
     on_push_to_talk_released = pyqtSignal()
-    on_model_changed         = pyqtSignal(str)
-    on_document_dropped      = pyqtSignal(str)
-    _sig_copilot_code        = pyqtSignal(str, str)   # (user_code, verification_uri)
-    _sig_copilot_error       = pyqtSignal(str)
+    on_model_changed = pyqtSignal(str)
+    on_document_dropped = pyqtSignal(str)
+    _sig_copilot_code = pyqtSignal(str, str)
+    _sig_copilot_error = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
@@ -150,7 +157,6 @@ class CompanionPanel(QWidget):
         self._setup_window()
         self._build_ui()
         self._position_bottom_right()
-        # Wire internal thread-safe signals â†’ main-thread slots
         self._sig_copilot_code.connect(self._on_copilot_code)
         self._sig_copilot_error.connect(self._on_copilot_error)
 
@@ -165,9 +171,8 @@ class CompanionPanel(QWidget):
         self.setFixedSize(PANEL_WIDTH, PANEL_HEIGHT)
         self.setObjectName("panel")
         self.setStyleSheet(PANEL_QSS)
-        self.setAcceptDrops(True)   # drag-drop PDFs / DOCX / TXT
+        self.setAcceptDrops(True)
 
-    # â”€â”€ Drag-drop handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
@@ -184,19 +189,16 @@ class CompanionPanel(QWidget):
         root.setContentsMargins(18, 18, 18, 18)
         root.setSpacing(12)
 
-        # Header
         header = QHBoxLayout()
         title = QLabel("Kai Agent")
         title.setObjectName("title")
         title.setFont(FONT_TITLE)
         header.addWidget(title)
         header.addStretch()
-        provider = cfg.llm_provider()
-        self._badge = ProviderBadge(provider)
+        self._badge = ProviderBadge(cfg.llm_provider())
         header.addWidget(self._badge)
 
-        # Minimize button â€” hides the panel back to tray
-        self._min_btn = QPushButton("â€”")
+        self._min_btn = QPushButton("-")
         self._min_btn.setFixedSize(24, 24)
         self._min_btn.setStyleSheet(
             "QPushButton { background: rgba(60,60,75,180); color: rgb(220,220,230);"
@@ -208,15 +210,15 @@ class CompanionPanel(QWidget):
         header.addWidget(self._min_btn)
         root.addLayout(header)
 
-        # Divider
         div = QFrame()
         div.setFrameShape(QFrame.Shape.HLine)
         div.setStyleSheet("color: rgba(60,60,75,180);")
         root.addWidget(div)
 
-        # Status row
-        self._status_dot = QLabel("â—")
-        self._status_dot.setStyleSheet(f"color: rgb({STATE_IDLE.red()},{STATE_IDLE.green()},{STATE_IDLE.blue()}); font-size: 10px;")
+        self._status_dot = QLabel("\u25cf")
+        self._status_dot.setStyleSheet(
+            f"color: rgb({STATE_IDLE.red()},{STATE_IDLE.green()},{STATE_IDLE.blue()}); font-size: 10px;"
+        )
         self._status_label = QLabel(STATE_LABELS[AppState.IDLE])
         self._status_label.setObjectName("status")
         self._status_label.setFont(FONT_STATUS)
@@ -226,12 +228,10 @@ class CompanionPanel(QWidget):
         status_row.addStretch()
         root.addLayout(status_row)
 
-        # Waveform
         self._waveform = WaveformWidget()
         self._waveform.setVisible(False)
         root.addWidget(self._waveform)
 
-        # Response area
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -239,20 +239,24 @@ class CompanionPanel(QWidget):
         self._response_label.setObjectName("response")
         self._response_label.setFont(FONT_RESPONSE)
         self._response_label.setWordWrap(True)
-        self._response_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        self._response_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self._response_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self._response_label.setAlignment(
+            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft
+        )
+        self._response_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        self._response_label.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
         scroll.setWidget(self._response_label)
         root.addWidget(scroll, stretch=1)
 
-        # Push-to-talk button
         self._ptt_btn = QPushButton("Say 'Kai Agent' or hold Ctrl+Alt+Space")
         self._ptt_btn.setObjectName("hotkey_btn")
         self._ptt_btn.setFont(FONT_LABEL)
         self._ptt_btn.setFixedHeight(44)
         root.addWidget(self._ptt_btn)
 
-        # Footer: model selector + provider info
         footer = QHBoxLayout()
         lbl = QLabel("Model:")
         lbl.setFont(FONT_LABEL)
@@ -263,7 +267,6 @@ class CompanionPanel(QWidget):
             "border-radius: 6px; color: rgb(200,200,215); padding: 2px 6px; font-size: 11px;"
         )
         self._populate_models()
-        # Emit the model id (stored in userData), not the display label
         self._model_combo.currentIndexChanged.connect(
             lambda _idx: self.on_model_changed.emit(
                 self._model_combo.currentData() or self._model_combo.currentText()
@@ -277,7 +280,6 @@ class CompanionPanel(QWidget):
         self._set_models_for(cfg.llm_provider())
 
     def _set_models_for(self, provider: str):
-        # Avoid firing on_model_changed while we rebuild
         self._model_combo.blockSignals(True)
         self._model_combo.clear()
         if provider == "copilot":
@@ -286,6 +288,7 @@ class CompanionPanel(QWidget):
         elif provider in ("claude", "openai", "gemini"):
             try:
                 from ai.model_registry import cached_models
+
                 for m in cached_models(provider):
                     label = m["id"]
                     if not m.get("vision"):
@@ -293,27 +296,25 @@ class CompanionPanel(QWidget):
                     self._model_combo.addItem(label, userData=m["id"])
             except Exception:
                 self._model_combo.addItem("default", userData="default")
-        else:   # ollama
+        else:
             self._model_combo.addItem(cfg.ollama_model, userData=cfg.ollama_model)
         self._model_combo.blockSignals(False)
-        # Fire once with the new default model id (NOT the display label) so
-        # the manager picks it up â€” important when label != id.
         if self._model_combo.count():
-            self.on_model_changed.emit(self._model_combo.currentData() or self._model_combo.currentText())
+            self.on_model_changed.emit(
+                self._model_combo.currentData() or self._model_combo.currentText()
+            )
 
     def refresh_for_provider(self, provider: str):
-        """Called from outside when the active provider is switched at runtime."""
         self._badge.set_provider(provider)
         self._set_models_for(provider)
 
     def _position_bottom_right(self):
         from PyQt6.QtWidgets import QApplication
+
         screen = QApplication.primaryScreen().geometry()
         x = screen.right() - PANEL_WIDTH - 24
         y = screen.bottom() - PANEL_HEIGHT - 60
         self.move(x, y)
-
-    # â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def set_state(self, state: AppState):
         self._state = state
@@ -329,7 +330,6 @@ class CompanionPanel(QWidget):
             self._waveform.stop()
 
     def update_response(self, text: str):
-        """Append streaming text chunk."""
         self._response_text = text
         self._response_label.setText(text)
 
@@ -345,21 +345,16 @@ class CompanionPanel(QWidget):
         self._response_label.setText("")
 
     def show_copilot_code(self, user_code: str, verification_uri: str):
-        """Thread-safe: can be called from any thread. Emits a queued signal
-        so the UI update always runs on the Qt main thread."""
         self._sig_copilot_code.emit(user_code, verification_uri)
 
     def show_copilot_error(self, error: str):
-        """Thread-safe version of showing a Copilot login error."""
         self._sig_copilot_error.emit(error)
 
-    # â”€â”€ Private slots (always run on Qt main thread) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
     def _on_copilot_code(self, user_code: str, verification_uri: str):
-        self.show()   # bring panel to front
+        self.show()
         self.raise_()
         self._response_text = (
-            "â”€â”€ GitHub Copilot Sign-In â”€â”€\n\n"
+            "-- GitHub Copilot Sign-In --\n\n"
             f"1.  Open:  {verification_uri}\n\n"
             f"2.  Enter code:\n\n"
             f"        {user_code}\n\n"
@@ -367,22 +362,24 @@ class CompanionPanel(QWidget):
             "Kai Agent will sign in automatically once you authorize."
         )
         self._response_label.setText(self._response_text)
-        self._status_label.setText("Waiting for Copilot authorizationâ€¦")
+        self._status_label.setText("Waiting for Copilot authorization...")
 
     def _on_copilot_error(self, error: str):
         self._response_text = f"Copilot login failed:\n\n{error}"
         self._response_label.setText(self._response_text)
 
-    # â”€â”€ Mouse drag to reposition â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            self._drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            self._drag_pos = (
+                event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            )
 
     def mouseMoveEvent(self, event):
-        if event.buttons() == Qt.MouseButton.LeftButton and hasattr(self, '_drag_pos'):
+        if event.buttons() == Qt.MouseButton.LeftButton and hasattr(
+            self, "_drag_pos"
+        ):
             self.move(event.globalPosition().toPoint() - self._drag_pos)
 
-    # â”€â”€ Painting: rounded glass background â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -390,4 +387,3 @@ class CompanionPanel(QWidget):
         painter.setPen(QPen(QColor(60, 60, 75, 180), 1))
         painter.drawRoundedRect(self.rect(), PANEL_RADIUS, PANEL_RADIUS)
         painter.end()
-
