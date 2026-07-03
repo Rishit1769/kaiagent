@@ -285,6 +285,8 @@ class CompanionManager(QObject):
     sig_state_changed       = pyqtSignal(object)          # AppState
     sig_capture_started     = pyqtSignal()
     sig_transcription_text  = pyqtSignal(str)
+    sig_transcription_final = pyqtSignal(str)
+    sig_transcription_error = pyqtSignal(str)
     sig_response_reset      = pyqtSignal()
     sig_response_chunk      = pyqtSignal(str)
     sig_response_done       = pyqtSignal(str)
@@ -584,6 +586,11 @@ class CompanionManager(QObject):
     # â”€â”€ Capture flow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _begin_capture(self):
+        if not self._listener.audio_available:
+            logger.warning("Mic start failed: audio backend unavailable")
+            self.sig_transcription_error.emit("Mic not available")
+            return
+        logger.info("Capture begin: showing cursor overlay near cursor")
         self.sig_capture_started.emit()
         self.sig_transcription_text.emit("")
         self._listener.start_recording()
@@ -603,9 +610,11 @@ class CompanionManager(QObject):
         await self._end_capture_and_process()
 
     async def _end_capture_and_process(self):
+        logger.info("Mic stopped")
         pcm = self._listener.stop_recording()
         self._stop_live_transcription(final_pcm=pcm)
         if len(pcm) < 3200:  # < 0.1s of audio â€” ignore
+            self.sig_transcription_final.emit("")
             self._emit_state(AppState.IDLE)
             return
 
@@ -614,10 +623,15 @@ class CompanionManager(QObject):
 
         try:
             # 1. Transcribe
-            transcript = await self._get_stt().transcribe(pcm)
+            try:
+                transcript = await self._get_stt().transcribe(pcm)
+            except Exception as e:
+                self.sig_transcription_error.emit(str(e))
+                raise
             logger.info("Final transcription received: %r", transcript)
             if transcript.strip():
                 self.sig_transcription_text.emit(transcript)
+            self.sig_transcription_final.emit(transcript)
             if not transcript.strip():
                 self._emit_state(AppState.IDLE)
                 return

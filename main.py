@@ -23,6 +23,7 @@ from ui.overlay import (
     CursorOverlay,
 )
 from ui.panel import AppState, CompanionPanel
+from ui.transcription_overlay import TranscriptionOverlay
 from ui.tray import TrayManager
 
 
@@ -61,10 +62,17 @@ def _copilot_login_flow(tray, panel, manager):
 
 
 def main():
+    def _log_uncaught(exc_type, exc, tb):
+        logging.getLogger("kai_agent").exception(
+            "Uncaught exception reached sys.excepthook",
+            exc_info=(exc_type, exc, tb),
+        )
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
     )
+    sys.excepthook = _log_uncaught
     QApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
     )
@@ -75,8 +83,13 @@ def main():
 
     manager = CompanionManager()
     panel = CompanionPanel()
+    panel.hide()
     overlay = CursorOverlay()
+    transcription_overlay = TranscriptionOverlay()
     tray = TrayManager()
+    app.aboutToQuit.connect(
+        lambda: logging.getLogger("kai_agent").warning("QApplication aboutToQuit fired")
+    )
 
     def _on_state(state: AppState):
         panel.set_state(state)
@@ -84,12 +97,16 @@ def main():
         overlay.set_mode(STATE_TO_CURSOR_MODE.get(state, MODE_IDLE))
 
     manager.sig_state_changed.connect(_on_state)
-    manager.sig_capture_started.connect(panel.prepare_for_transcription)
-    manager.sig_transcription_text.connect(panel.update_transcription)
+    manager.sig_capture_started.connect(panel.hide)
+    manager.sig_capture_started.connect(transcription_overlay.begin_capture)
+    manager.sig_transcription_text.connect(transcription_overlay.update_transcription)
+    manager.sig_transcription_final.connect(transcription_overlay.finalize_transcription)
+    manager.sig_transcription_error.connect(transcription_overlay.show_mic_error)
     manager.sig_response_reset.connect(panel.clear_response)
     manager.sig_response_chunk.connect(panel.append_response_chunk)
     manager.sig_audio_level.connect(panel.set_audio_level)
     manager.sig_audio_level.connect(overlay.set_audio_level)
+    manager.sig_audio_level.connect(transcription_overlay.set_audio_level)
     manager.sig_point_at.connect(overlay.point_at)
     manager.sig_point_hold.connect(overlay.set_point_hold)
     manager.sig_point_release.connect(overlay.release_point)
@@ -352,7 +369,9 @@ def main():
     except Exception as e:
         print(f"[setup-wizard] skipped: {e}")
 
-    sys.exit(app.exec())
+    exit_code = app.exec()
+    logging.getLogger("kai_agent").warning("QApplication exited with code %s", exit_code)
+    return exit_code
 
 
 _setup_keepalive: list = [None]
