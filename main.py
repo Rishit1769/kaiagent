@@ -99,7 +99,12 @@ def main():
     manager.sig_state_changed.connect(_on_state)
     manager.sig_capture_started.connect(panel.hide)
     manager.sig_capture_started.connect(transcription_overlay.begin_capture)
-    manager.sig_transcription_text.connect(transcription_overlay.update_transcription)
+
+    def _debug_update_transcription(text: str):
+        print("UI RECEIVED:", text)
+        transcription_overlay.update_transcription(text)
+
+    manager.sig_transcription_text.connect(_debug_update_transcription)
     manager.sig_transcription_final.connect(transcription_overlay.finalize_transcription)
     manager.sig_transcription_error.connect(transcription_overlay.show_mic_error)
     manager.sig_response_reset.connect(panel.clear_response)

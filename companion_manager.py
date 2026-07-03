@@ -8,6 +8,7 @@ Orchestrates:
 
 import asyncio
 import logging
+import os
 import re
 import threading
 import time
@@ -40,7 +41,7 @@ _preview_model_cache = None
 
 PCM_BYTES_PER_SECOND = 16000 * 2
 LIVE_TRANSCRIBE_POLL_S = 0.2
-LIVE_TRANSCRIBE_CHUNK_S = 0.8
+LIVE_TRANSCRIBE_CHUNK_S = 0.5
 LIVE_TRANSCRIBE_CHUNK_BYTES = int(PCM_BYTES_PER_SECOND * LIVE_TRANSCRIBE_CHUNK_S)
 LIVE_TRANSCRIBE_FINAL_MIN_S = 0.35
 LIVE_TRANSCRIBE_FINAL_MIN_BYTES = int(PCM_BYTES_PER_SECOND * LIVE_TRANSCRIBE_FINAL_MIN_S)
@@ -66,7 +67,8 @@ def _transcribe_preview_segments(pcm_bytes: bytes) -> list[str]:
     if not pcm_bytes:
         return []
     model = _get_preview_model()
-    wav_bytes = pcm16_to_wav(pcm_bytes)
+    silence_pad = bytes(int(PCM_BYTES_PER_SECOND * 0.2))
+    wav_bytes = pcm16_to_wav(silence_pad + pcm_bytes + silence_pad)
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
         f.write(wav_bytes)
         path = f.name
@@ -76,9 +78,19 @@ def _transcribe_preview_segments(pcm_bytes: bytes) -> list[str]:
             beam_size=1,
             language="en",
             condition_on_previous_text=False,
-            vad_filter=True,
+            vad_filter=False,
+            no_speech_threshold=0.2,
+            temperature=0.0,
         )
-        return [s.text.strip() for s in segments if s.text.strip()]
+        out: list[str] = []
+        for seg in segments:
+            text = seg.text.strip()
+            if not text:
+                continue
+            print("TRANSCRIBED:", text)
+            logger.info("TRANSCRIBED: %r", text)
+            out.append(text)
+        return out
     finally:
         os.unlink(path)
 
@@ -539,6 +551,7 @@ class CompanionManager(QObject):
             pass   # never crash the sounddevice audio thread
 
     def _start_live_transcription(self):
+        logger.info("Starting live transcription thread")
         self._live_transcription_stop.set()
         if self._live_transcription_thread and self._live_transcription_thread.is_alive():
             self._live_transcription_thread.join(timeout=0.2)
@@ -554,6 +567,7 @@ class CompanionManager(QObject):
         self._live_transcription_thread.start()
 
     def _stop_live_transcription(self, final_pcm: bytes | None = None):
+        logger.info("Stopping live transcription thread")
         self._live_transcription_stop.set()
         thread = self._live_transcription_thread
         if thread and thread.is_alive():
@@ -571,6 +585,7 @@ class CompanionManager(QObject):
                 if final_text:
                     self._live_transcription_text = final_text
                     logger.info("Final live transcription preview emitted: %r", final_text)
+                    print("EMITTING:", final_text)
                     self.sig_transcription_text.emit(final_text)
             except Exception as e:
                 logger.debug("Final live transcription preview failed: %s", e)
@@ -587,6 +602,7 @@ class CompanionManager(QObject):
                 new_pcm = pcm[consumed_bytes:]
                 consumed_bytes = len(pcm)
                 pending_pcm.extend(new_pcm)
+                print("chunk captured", len(new_pcm))
                 logger.info("Audio chunk captured: %s bytes pending=%s", len(new_pcm), len(pending_pcm))
                 while len(pending_pcm) >= LIVE_TRANSCRIBE_CHUNK_BYTES:
                     chunk_pcm = bytes(pending_pcm[:LIVE_TRANSCRIBE_CHUNK_BYTES])
@@ -597,10 +613,13 @@ class CompanionManager(QObject):
                     self._live_transcription_processed_bytes += len(chunk_pcm)
                     if not segments:
                         continue
+                    chunk_text = " ".join(segments).strip()
+                    print("transcribed chunk", chunk_text)
                     self._live_transcription_parts.extend(segments)
                     text = " ".join(self._live_transcription_parts).strip()
                     if text and text != self._live_transcription_text:
                         self._live_transcription_text = text
+                        print("EMITTING:", text)
                         logger.info("Text emitted to UI: %r", text)
                         self.sig_transcription_text.emit(text)
             except Exception as e:
@@ -620,7 +639,11 @@ class CompanionManager(QObject):
         self.sig_capture_started.emit()
         self.sig_transcription_text.emit("")
         self._listener.start_recording()
+        print("mic started")
         logger.info("Mic started")
+        if os.environ.get("KAI_AGENT_DEBUG_FAKE_TRANSCRIPTION", "").strip().lower() in {"1", "true", "yes"}:
+            print("EMITTING:", "hello testing")
+            self.sig_transcription_text.emit("hello testing")
         self._start_live_transcription()
         self._emit_state(AppState.LISTENING)
 
@@ -656,6 +679,7 @@ class CompanionManager(QObject):
                 raise
             logger.info("Final transcription received: %r", transcript)
             if transcript.strip():
+                print("EMITTING:", transcript)
                 self.sig_transcription_text.emit(transcript)
             self.sig_transcription_final.emit(transcript)
             if not transcript.strip():

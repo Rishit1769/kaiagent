@@ -1,9 +1,9 @@
 import math
 import logging
 
-from PyQt6.QtCore import QEasingCurve, QPoint, QPropertyAnimation, QRectF, QTimer, Qt, pyqtProperty
+from PyQt6.QtCore import QEasingCurve, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QTimer, Qt, pyqtProperty
 from PyQt6.QtGui import QColor, QCursor, QFontMetrics, QLinearGradient, QPainter, QPainterPath, QPen, QRadialGradient
-from PyQt6.QtWidgets import QApplication, QWidget
+from PyQt6.QtWidgets import QApplication, QTextEdit, QWidget
 
 from ui.design import ANIM_FAST_MS, BLUE_GLOW, FONT_RESPONSE, TEXT_PRIMARY, TEXT_SECONDARY
 
@@ -19,12 +19,17 @@ class TranscriptionOverlay(QWidget):
     MIN_WIDTH = 220
     MIN_HEIGHT = 74
     HOLD_MS = 1500
+    TEXT_REVEAL_MS = 18
+    CHAR_FADE_MS = 140
 
     def __init__(self):
         super().__init__()
         self.partial_text = ""
         self.final_text = ""
         self._display_text = ""
+        self._target_text = ""
+        self._animated_text = ""
+        self._revealed_char_times: list[int] = []
         self._placeholder = "Listening..."
         self._show_placeholder = True
         self._mic_error = False
@@ -45,9 +50,17 @@ class TranscriptionOverlay(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.hide()
 
+        self._text_layer = _LiquidGlassTextLayer(self)
+        self._text_layer.setGeometry(self._text_rect())
+        self._text_layer.raise_()
+
         self._tick = QTimer(self)
         self._tick.timeout.connect(self._animate_tick)
         self._tick.start(16)
+
+        self._typing_timer = QTimer(self)
+        self._typing_timer.timeout.connect(self._advance_typing_animation)
+        self._typing_timer.setInterval(self.TEXT_REVEAL_MS)
 
         self._follow_timer = QTimer(self)
         self._follow_timer.timeout.connect(self._move_near_cursor)
@@ -74,6 +87,9 @@ class TranscriptionOverlay(QWidget):
         self.partial_text = ""
         self.final_text = ""
         self._display_text = ""
+        self._target_text = ""
+        self._animated_text = ""
+        self._revealed_char_times = []
         self._placeholder = "Listening..."
         self._show_placeholder = True
         self._mic_error = False
@@ -84,18 +100,31 @@ class TranscriptionOverlay(QWidget):
         self._overlay_opacity = 0.0
         self.show()
         self.raise_()
+        self._text_layer.raise_()
         self._follow_timer.start()
         self._fade_to(1.0, ANIM_FAST_MS)
+        self._render_visible_text()
         self.update()
 
     def update_transcription(self, text: str):
         logger.info("Overlay transcription updated: %r", text)
+        print("TEXT RECEIVED:", text)
         self.partial_text = text
         self._show_placeholder = not bool(text.strip()) and not self._mic_error
-        self._display_text = text.strip()
+        clean_text = text.strip()
+        if clean_text.startswith(self._display_text):
+            self._display_text = clean_text
+        elif clean_text:
+            prefix_len = 0
+            for old_char, new_char in zip(self._display_text, clean_text):
+                if old_char != new_char:
+                    break
+                prefix_len += 1
+            self._display_text = self._display_text + clean_text[prefix_len:]
+        else:
+            self._display_text = ""
         self._resize_for_text()
-        self._pulse_text()
-        self.update()
+        self._queue_text_render()
 
     def finalize_transcription(self, text: str):
         logger.info("Transcription overlay finalize: %r", text)
@@ -112,7 +141,7 @@ class TranscriptionOverlay(QWidget):
         self._follow_cursor = False
         self._follow_timer.stop()
         self._resize_for_text()
-        self._pulse_text()
+        self._queue_text_render(force_reset=not self.final_text)
         self._hide_timer.start(self.HOLD_MS)
         self.update()
 
@@ -129,8 +158,9 @@ class TranscriptionOverlay(QWidget):
         self._resize_for_text()
         self.show()
         self.raise_()
+        self._text_layer.raise_()
         self._fade_to(1.0, ANIM_FAST_MS)
-        self._pulse_text()
+        self._queue_text_render(force_reset=True)
         self._hide_timer.start(self.HOLD_MS)
         self.update()
 
@@ -162,6 +192,48 @@ class TranscriptionOverlay(QWidget):
         self._text_opacity = 0.7
         self._text_anim.start()
 
+    def _queue_text_render(self, force_reset: bool = False):
+        target = self._current_text()
+        if force_reset or not target.startswith(self._animated_text):
+            self._animated_text = ""
+            self._revealed_char_times = []
+        self._target_text = target
+        self._pulse_text()
+        self._render_visible_text()
+        if self._animated_text != self._target_text:
+            self._typing_timer.start()
+        else:
+            self._typing_timer.stop()
+        self.update()
+
+    def _advance_typing_animation(self):
+        if self._animated_text == self._target_text:
+            self._typing_timer.stop()
+            return
+        next_index = len(self._animated_text)
+        self._animated_text += self._target_text[next_index]
+        self._revealed_char_times.append(self._now_ms())
+        self._render_visible_text()
+        if self._animated_text == self._target_text:
+            self._typing_timer.stop()
+
+    def _render_visible_text(self):
+        text = self._current_text()
+        visible_text = self._animated_text if text == self._target_text else text
+        if not visible_text and self._show_placeholder:
+            visible_text = self._placeholder
+        self._text_layer.set_text(
+            visible_text,
+            placeholder=self._show_placeholder,
+            mic_error=self._mic_error,
+            text_opacity=self._text_opacity,
+            reveal_times=self._revealed_char_times,
+            full_target=self._target_text or text,
+        )
+        print("UI updated", visible_text)
+        print("text rendered", visible_text)
+        logger.info("TEXT RENDERED: %r", visible_text)
+
     def _move_near_cursor(self):
         cursor = QCursor.pos() + self.CURSOR_OFFSET
         screen = QApplication.screenAt(cursor) or QApplication.primaryScreen()
@@ -185,18 +257,41 @@ class TranscriptionOverlay(QWidget):
         width = max(self.MIN_WIDTH, min(390, rect.width() + 92))
         height = max(self.MIN_HEIGHT, min(150, rect.height() + 36))
         self.resize(width, height)
+        self._text_layer.setGeometry(self._text_rect())
         if self.isVisible():
             self._move_near_cursor()
 
     def _animate_tick(self):
         self._orb_phase += 0.12 + self._audio_level * 0.08
+        self._text_layer.update()
         self.update()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._text_layer.setGeometry(self._text_rect())
+
+    def _text_rect(self) -> QRect:
+        rect = self.rect().adjusted(76, 22, -28, -22)
+        return rect if rect.width() > 0 and rect.height() > 0 else self.rect()
+
+    @staticmethod
+    def _now_ms() -> int:
+        from time import monotonic_ns
+        return monotonic_ns() // 1_000_000
 
     def get_text_opacity(self) -> float:
         return self._text_opacity
 
     def set_text_opacity(self, value: float):
         self._text_opacity = value
+        self._text_layer.set_text(
+            self._text_layer._text,
+            placeholder=self._show_placeholder,
+            mic_error=self._mic_error,
+            text_opacity=self._text_opacity,
+            reveal_times=self._revealed_char_times,
+            full_target=self._target_text or self._current_text(),
+        )
         self.update()
 
     textOpacity = pyqtProperty(float, fget=get_text_opacity, fset=set_text_opacity)
@@ -252,41 +347,125 @@ class TranscriptionOverlay(QWidget):
             painter.drawPath(path)
 
             orb_center = QPoint(40, self.height() // 2)
+            orb_center_f = QPointF(orb_center)
             pulse = 1.0 + 0.08 * math.sin(self._orb_phase) + self._audio_level * 0.22
-            outer = QRadialGradient(orb_center, 26 * pulse)
+            outer = QRadialGradient(orb_center_f, 26.0 * pulse)
             outer.setColorAt(0.0, QColor(110, 180, 255, 155))
             outer.setColorAt(0.55, QColor(40, 140, 255, 72))
             outer.setColorAt(1.0, QColor(40, 140, 255, 0))
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(outer)
-            painter.drawEllipse(orb_center, int(26 * pulse), int(26 * pulse))
+            painter.drawEllipse(orb_center_f, 26.0 * pulse, 26.0 * pulse)
 
-            mid = QRadialGradient(orb_center, 12 * pulse)
+            mid = QRadialGradient(orb_center_f, 12.0 * pulse)
             mid.setColorAt(0.0, QColor(220, 245, 255, 255))
             mid.setColorAt(0.45, QColor(90, 180, 255, 235))
             mid.setColorAt(1.0, QColor(36, 115, 255, 210))
             painter.setBrush(mid)
-            painter.drawEllipse(orb_center, int(12 * pulse), int(12 * pulse))
+            painter.drawEllipse(orb_center_f, 12.0 * pulse, 12.0 * pulse)
 
             ring = QColor(190, 225, 255, 120)
             painter.setPen(QPen(ring, 1.3))
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawEllipse(orb_center, int(14 * pulse), int(14 * pulse))
+            painter.drawEllipse(orb_center_f, 14.0 * pulse, 14.0 * pulse)
 
-            text_rect = rect.adjusted(66.0, 14.0, -18.0, -14.0)
-            painter.setFont(FONT_RESPONSE)
-            text_color = QColor(TEXT_SECONDARY if self._show_placeholder else TEXT_PRIMARY)
-            if self._mic_error:
-                text_color = QColor(255, 210, 210)
-            text_color.setAlpha(int(255 * self._text_opacity))
-            painter.setPen(text_color)
-            painter.drawText(
-                text_rect,
-                Qt.AlignmentFlag.AlignVCenter | Qt.TextFlag.TextWordWrap,
-                self._current_text(),
-            )
         except Exception:
             logger.exception("Transcription overlay paintEvent failed")
+        finally:
+            if painter.isActive():
+                painter.end()
+
+
+class _LiquidGlassTextLayer(QTextEdit):
+    """Dedicated top text layer so orb/background painting never hides transcription."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._text = ""
+        self._placeholder = True
+        self._mic_error = False
+        self._text_opacity = 1.0
+        self._reveal_times: list[int] = []
+        self._full_target = ""
+        self.setReadOnly(True)
+        self.setFrameStyle(0)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setStyleSheet("background: transparent; border: none;")
+        self.viewport().setAutoFillBackground(False)
+        self.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
+
+    def set_text(
+        self,
+        text: str,
+        *,
+        placeholder: bool,
+        mic_error: bool,
+        text_opacity: float,
+        reveal_times: list[int],
+        full_target: str,
+    ):
+        self._text = text
+        self._placeholder = placeholder
+        self._mic_error = mic_error
+        self._text_opacity = text_opacity
+        self._reveal_times = list(reveal_times)
+        self._full_target = full_target
+        self.viewport().update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self.viewport())
+        try:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+            painter.setFont(FONT_RESPONSE)
+
+            base_color = QColor(TEXT_SECONDARY if self._placeholder else TEXT_PRIMARY)
+            if self._mic_error:
+                base_color = QColor(255, 210, 210)
+            base_color.setAlpha(max(0, min(255, int(255 * self._text_opacity * 0.92))))
+
+            fm = QFontMetrics(FONT_RESPONSE)
+            line_height = fm.lineSpacing()
+            text_rect = self.viewport().rect()
+            x = float(text_rect.left())
+            y = float(text_rect.top() + fm.ascent() + 2)
+            max_width = max(10.0, float(text_rect.width()))
+            now_ms = TranscriptionOverlay._now_ms()
+
+            for index, char in enumerate(self._text):
+                if char == "\n":
+                    x = float(text_rect.left())
+                    y += float(line_height)
+                    continue
+                advance = float(fm.horizontalAdvance(char))
+                if x > text_rect.left() and x + advance > text_rect.left() + max_width:
+                    x = float(text_rect.left())
+                    y += float(line_height)
+                if y > text_rect.bottom() + line_height:
+                    break
+
+                progress = 1.0
+                if index < len(self._reveal_times):
+                    age = max(0, now_ms - self._reveal_times[index])
+                    progress = min(1.0, age / TranscriptionOverlay.CHAR_FADE_MS)
+                char_alpha = max(0.15, progress) * self._text_opacity
+                blur_alpha = max(0.0, 1.0 - progress) * 0.28 * self._text_opacity
+                y_offset = (1.0 - progress) * 3.0
+
+                if blur_alpha > 0.01 and not char.isspace():
+                    glow = QColor(190, 225, 255, int(255 * blur_alpha))
+                    painter.setPen(glow)
+                    painter.drawText(QPointF(x, y - y_offset + 1.0), char)
+
+                pen = QColor(base_color)
+                pen.setAlpha(max(0, min(255, int(base_color.alpha() * char_alpha))))
+                painter.setPen(pen)
+                painter.drawText(QPointF(x, y - y_offset), char)
+                x += advance
+        except Exception:
+            logger.exception("Transcription overlay text layer paintEvent failed")
         finally:
             if painter.isActive():
                 painter.end()

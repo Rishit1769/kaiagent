@@ -176,6 +176,7 @@ class AmbientListener:
         self._on_level(rms)
 
         if self._mode == Mode.RECORDING:
+            print("Audio chunk captured")
             with self._rec_lock:
                 self._rec_buffer.append(pcm_int16.tobytes())
             return
