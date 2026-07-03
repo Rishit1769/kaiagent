@@ -139,6 +139,32 @@ class CursorOverlay(QWidget):
     def set_mode(self, mode: str):
         self._mode = mode
 
+    def begin_request_visual(self):
+        """Ensure the overlay is covering the current desktop and ready for a request."""
+        self.refresh_screen_geometry()
+        if not self.isVisible():
+            self.show()
+
+    def show_detected_point(self, x: float, y: float, label: str = ""):
+        self.point_at(x, y, label)
+
+    def release_request_visual(self):
+        """Release point-specific visuals but keep the current mode intact."""
+        self.release_point()
+
+    def reset_to_idle(self):
+        """Fully reset overlay state after cancellation/failure/completion."""
+        self._release_lock()
+        self.clear_annotations()
+        self.refresh_screen_geometry()
+        self.set_mode(MODE_IDLE)
+        if not self.isVisible():
+            self.show()
+
+    def refresh_screen_geometry(self):
+        self._cover_all_monitors()
+        self.update()
+
     def set_audio_level(self, rms: float):
         # Match Swift easing: eased = pow(min(rms*2.85, 1), 0.76)
         norm = max(rms - 0.008, 0.0)

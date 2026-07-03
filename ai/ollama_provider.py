@@ -4,6 +4,7 @@ from typing import AsyncIterator, List
 import httpx
 
 from ai.base_provider import BaseLLMProvider, Message
+from ai.debug_image import save_model_visible_image
 from ai.ollama_models_registry import is_vision_capable
 from config import cfg
 
@@ -52,6 +53,13 @@ class OllamaProvider(BaseLLMProvider):
         # Ollama passes images as base64 strings inside the message
         user_msg: dict = {"role": "user", "content": user_text}
         if screenshots_b64:
+            for i, img_b64 in enumerate(screenshots_b64, start=1):
+                save_model_visible_image(
+                    img_b64,
+                    context="ollama-chat",
+                    index=i,
+                    metadata={"provider": "ollama", "model": chosen},
+                )
             user_msg["images"] = screenshots_b64
         messages.append(user_msg)
 

@@ -3,6 +3,7 @@ from typing import AsyncIterator, List
 import anthropic
 
 from ai.base_provider import BaseLLMProvider, Message
+from ai.debug_image import save_model_visible_image
 from config import cfg
 
 DEFAULT_MODEL = "claude-sonnet-4-6"
@@ -32,7 +33,13 @@ class ClaudeProvider(BaseLLMProvider):
 
         # Build current user message with optional screenshots
         content: list = []
-        for i, img_b64 in enumerate(screenshots_b64):
+        for i, img_b64 in enumerate(screenshots_b64, start=1):
+            save_model_visible_image(
+                img_b64,
+                context="claude-chat",
+                index=i,
+                metadata={"provider": "claude", "model": model},
+            )
             content.append({
                 "type": "image",
                 "source": {

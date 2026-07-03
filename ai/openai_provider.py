@@ -3,6 +3,7 @@ from typing import AsyncIterator, List
 from openai import AsyncOpenAI
 
 from ai.base_provider import BaseLLMProvider, Message
+from ai.debug_image import save_model_visible_image
 from config import cfg
 
 DEFAULT_MODEL = "gpt-4o"
@@ -30,7 +31,13 @@ class OpenAIProvider(BaseLLMProvider):
             messages.append({"role": msg.role, "content": msg.content})
 
         content: list = []
-        for img_b64 in screenshots_b64:
+        for i, img_b64 in enumerate(screenshots_b64, start=1):
+            save_model_visible_image(
+                img_b64,
+                context="openai-chat",
+                index=i,
+                metadata={"provider": "openai", "model": model},
+            )
             content.append({
                 "type": "image_url",
                 "image_url": {"url": f"data:image/jpeg;base64,{img_b64}", "detail": "high"},

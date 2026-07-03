@@ -9,6 +9,7 @@ from typing import AsyncIterator, List
 import httpx
 
 from ai.base_provider import BaseLLMProvider, Message
+from ai.debug_image import save_model_visible_image
 from config import cfg
 
 DEFAULT_MODEL = "gemini-2.5-flash"
@@ -41,7 +42,13 @@ class GeminiProvider(BaseLLMProvider):
             })
 
         parts: list = []
-        for img_b64 in screenshots_b64:
+        for i, img_b64 in enumerate(screenshots_b64, start=1):
+            save_model_visible_image(
+                img_b64,
+                context="gemini-chat",
+                index=i,
+                metadata={"provider": "gemini", "model": model},
+            )
             parts.append({
                 "inline_data": {"mime_type": "image/jpeg", "data": img_b64},
             })

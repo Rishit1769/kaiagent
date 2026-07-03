@@ -35,6 +35,7 @@ from typing import AsyncIterator, List, Optional
 import httpx
 
 from ai.base_provider import BaseLLMProvider, Message
+from ai.debug_image import save_model_visible_image
 
 
 VSCODE_CLIENT_ID = "Iv1.b507a08c87ecfe98"   # Public VS Code Copilot client id
@@ -446,7 +447,13 @@ class GitHubCopilotProvider(BaseLLMProvider):
         # Vision: Copilot's OpenAI-compatible endpoint supports image_url parts
         # on vision-capable models (gpt-4o, gpt-4o-mini). Encode as data URIs.
         content_parts: list = []
-        for img_b64 in screenshots_b64:
+        for i, img_b64 in enumerate(screenshots_b64, start=1):
+            save_model_visible_image(
+                img_b64,
+                context="copilot-chat",
+                index=i,
+                metadata={"provider": "copilot", "model": model},
+            )
             content_parts.append({
                 "type": "image_url",
                 "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"},

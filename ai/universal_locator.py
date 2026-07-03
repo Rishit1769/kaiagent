@@ -41,6 +41,7 @@ from typing import Optional, Tuple
 from PIL import Image, ImageDraw, ImageFont
 
 from ai.base_provider import BaseLLMProvider
+from ai.debug_image import save_model_visible_image
 
 
 # ─── Tunables ─────────────────────────────────────────────────────────────────
@@ -260,6 +261,16 @@ async def detect_element_universal(
     # ── Stage 1 ─────────────────────────────────────────────────────────
     s1_img = _draw_grid(infer_img, STAGE1_COLS, STAGE1_ROWS)
     s1_b64 = _img_to_jpeg_b64(s1_img, quality=80)
+    save_model_visible_image(
+        s1_b64,
+        context="universal-locator-stage1",
+        metadata={
+            "screen_index": screen_index,
+            "model": model or "",
+            "inference_width": iw,
+            "inference_height": ih,
+        },
+    )
 
     s1_max = STAGE1_COLS * STAGE1_ROWS
     s1_pick = await _ask_grid_pick(llm, s1_b64, user_question, s1_max, model=model)
@@ -299,6 +310,16 @@ async def detect_element_universal(
 
     s2_img = _draw_grid(crop, STAGE2_COLS, STAGE2_ROWS)
     s2_b64 = _img_to_jpeg_b64(s2_img, quality=85)
+    save_model_visible_image(
+        s2_b64,
+        context="universal-locator-stage2",
+        metadata={
+            "screen_index": screen_index,
+            "model": model or "",
+            "crop_width": crop.size[0],
+            "crop_height": crop.size[1],
+        },
+    )
 
     s2_max = STAGE2_COLS * STAGE2_ROWS
     s2_pick = await _ask_grid_pick(llm, s2_b64, user_question, s2_max, model=model)

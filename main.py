@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import QApplication
 from companion_manager import CompanionManager
 from config import cfg
 from hotkey import GlobalHotkeyMonitor, StopHotkey
+from screen.capture import detect_monitors, enable_dpi_awareness
 from ui.overlay import (
     MODE_IDLE,
     MODE_LISTENING,
@@ -73,6 +74,7 @@ def main():
         format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
     )
     sys.excepthook = _log_uncaught
+    enable_dpi_awareness()
     QApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
     )
@@ -80,6 +82,7 @@ def main():
     app.setQuitOnLastWindowClosed(False)
     app.setApplicationName("Kai Agent")
     app.setApplicationDisplayName("Kai Agent")
+    detect_monitors()
 
     manager = CompanionManager()
     panel = CompanionPanel()
@@ -112,7 +115,10 @@ def main():
     manager.sig_audio_level.connect(panel.set_audio_level)
     manager.sig_audio_level.connect(overlay.set_audio_level)
     manager.sig_audio_level.connect(transcription_overlay.set_audio_level)
-    manager.sig_point_at.connect(overlay.point_at)
+    manager.sig_overlay_begin_request.connect(overlay.begin_request_visual)
+    manager.sig_overlay_release_request.connect(overlay.release_request_visual)
+    manager.sig_overlay_reset.connect(overlay.reset_to_idle)
+    manager.sig_point_at.connect(overlay.show_detected_point)
     manager.sig_point_hold.connect(overlay.set_point_hold)
     manager.sig_point_release.connect(overlay.release_point)
     manager.sig_arrow.connect(overlay.add_arrow)
@@ -267,6 +273,9 @@ def main():
         tray.show_notification("Ollama", status)
 
     manager.sig_ollama_pull_status.connect(_on_ollama_pull_status)
+
+    app.screenAdded.connect(lambda _screen: overlay.refresh_screen_geometry())
+    app.screenRemoved.connect(lambda _screen: overlay.refresh_screen_geometry())
 
     if cfg.llm_provider() == "ollama":
         manager.refresh_ollama_models()

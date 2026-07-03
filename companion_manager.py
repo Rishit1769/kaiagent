@@ -7,13 +7,15 @@ Orchestrates:
 """
 
 import asyncio
+import concurrent.futures
 import logging
 import os
 import re
 import threading
 import time
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Awaitable, List, Optional
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
@@ -48,6 +50,40 @@ LIVE_TRANSCRIBE_WINDOW_BYTES = int(PCM_BYTES_PER_SECOND * LIVE_TRANSCRIBE_WINDOW
 LIVE_TRANSCRIBE_DECODE_INTERVAL_S = 0.35
 LIVE_TRANSCRIBE_FINAL_MIN_S = 0.35
 LIVE_TRANSCRIBE_FINAL_MIN_BYTES = int(PCM_BYTES_PER_SECOND * LIVE_TRANSCRIBE_FINAL_MIN_S)
+
+STT_TIMEOUT_S = 45.0
+LOCATOR_TIMEOUT_S = 20.0
+SEARCH_TIMEOUT_S = 15.0
+LLM_FIRST_TOKEN_TIMEOUT_S = 30.0
+TTS_TIMEOUT_S = 90.0
+
+
+class SessionCancelled(RuntimeError):
+    """Raised when a request session is superseded, cancelled, or no longer active."""
+
+
+class RequestTimeout(RuntimeError):
+    """Raised when a request phase exceeds its watchdog deadline."""
+
+
+@dataclass
+class RequestSession:
+    request_id: int
+    origin: str
+    started_at: float
+    phase: str = "created"
+    transcript: str = ""
+    screenshot: Any = None
+    detected_point: Optional[tuple[int, int, str]] = None
+    search_task: Optional[asyncio.Task] = None
+    locate_task: Optional[asyncio.Task] = None
+    stream_task: Optional[asyncio.Task] = None
+    tts_task: Optional[asyncio.Task] = None
+    cancelled: bool = False
+    overlay_engaged: bool = False
+    cleanup_done: bool = False
+    error: str = ""
+    seen_tags: set[str] = field(default_factory=set)
 
 
 def _get_preview_model():
@@ -322,6 +358,9 @@ class CompanionManager(QObject):
     sig_underline           = pyqtSignal(float, float, float)
     sig_label               = pyqtSignal(float, float, str)
     sig_recording_state     = pyqtSignal(bool, str)       # (is_recording, output_dir)
+    sig_overlay_begin_request = pyqtSignal()
+    sig_overlay_release_request = pyqtSignal()
+    sig_overlay_reset = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -337,8 +376,10 @@ class CompanionManager(QObject):
         self._tts = None
 
         # Current in-flight generation â€” tracked so Esc / stop can cancel
-        self._current_task: Optional[asyncio.Future] = None
-        self._cancel_flag = False
+        self._current_task: Optional[concurrent.futures.Future] = None
+        self._request_counter = 0
+        self._active_session: Optional[RequestSession] = None
+        self._cancel_flag = False  # legacy compatibility for older helper paths
         self._live_transcription_stop = threading.Event()
         self._live_transcription_thread: Optional[threading.Thread] = None
         self._live_transcription_text = ""
@@ -465,10 +506,156 @@ class CompanionManager(QObject):
         # 3. Reset state to IDLE so the panel shows the correct status
         if self._state != AppState.IDLE:
             self._emit_state(AppState.IDLE)
+        self.sig_overlay_reset.emit()
 
-    def _submit(self, coro):
-        if self._loop:
-            asyncio.run_coroutine_threadsafe(coro, self._loop)
+    def _submit(self, coro: Awaitable[Any]) -> Optional[concurrent.futures.Future]:
+        if not self._loop or not self._loop.is_running():
+            logger.warning("Refusing to submit coroutine because the asyncio loop is unavailable")
+            self.sig_error.emit("Background request loop unavailable. Please try again.")
+            try:
+                coro.close()
+            except Exception:
+                pass
+            return None
+        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+
+        def _log_done(done: concurrent.futures.Future):
+            try:
+                done.result()
+            except concurrent.futures.CancelledError:
+                logger.info("Background future cancelled")
+            except Exception:
+                logger.exception("Background future failed")
+
+        future.add_done_callback(_log_done)
+        return future
+
+    def _next_request_id(self) -> int:
+        self._request_counter += 1
+        return self._request_counter
+
+    def _start_request_session(self, origin: str) -> Optional[RequestSession]:
+        if self._active_session and not self._active_session.cleanup_done:
+            logger.warning(
+                "Rejecting new request while another session is active req=%s phase=%s origin=%s",
+                self._active_session.request_id,
+                self._active_session.phase,
+                origin,
+            )
+            return None
+        session = RequestSession(
+            request_id=self._next_request_id(),
+            origin=origin,
+            started_at=time.monotonic(),
+        )
+        self._active_session = session
+        self._log_session(session, "session started")
+        return session
+
+    def _log_session(self, session: RequestSession, message: str, **extra: Any) -> None:
+        payload = {
+            "req": session.request_id,
+            "origin": session.origin,
+            "phase": session.phase,
+            "overlay": session.overlay_engaged,
+            "elapsed_ms": int((time.monotonic() - session.started_at) * 1000),
+            "provider": cfg.llm_provider(),
+        }
+        payload.update(extra)
+        detail = " ".join(f"{k}={v}" for k, v in payload.items())
+        logger.info("[request] %s %s", message, detail)
+
+    def _transition_session(self, session: RequestSession, phase: str, **extra: Any) -> None:
+        session.phase = phase
+        self._log_session(session, "phase transition", **extra)
+
+    def _is_active_session(self, session: Optional[RequestSession]) -> bool:
+        return bool(
+            session
+            and self._active_session is session
+            and not session.cleanup_done
+            and not session.cancelled
+        )
+
+    def _assert_active_session(self, session: RequestSession) -> None:
+        if not self._is_active_session(session):
+            raise SessionCancelled("request session is no longer active")
+
+    def _mark_session_cancelled(self, session: RequestSession, reason: str) -> None:
+        if session.cancelled:
+            return
+        session.cancelled = True
+        session.error = reason
+        self._transition_session(session, "cancelled", reason=reason)
+
+    async def _await_with_timeout(
+        self,
+        session: RequestSession,
+        awaitable: Awaitable[Any],
+        timeout_s: float,
+        phase: str,
+        timeout_message: str,
+    ) -> Any:
+        self._assert_active_session(session)
+        try:
+            result = await asyncio.wait_for(awaitable, timeout=timeout_s)
+        except asyncio.TimeoutError as exc:
+            raise RequestTimeout(timeout_message) from exc
+        self._assert_active_session(session)
+        self._transition_session(session, phase)
+        return result
+
+    def _cancel_session_tasks(self, session: RequestSession) -> None:
+        for task in (session.search_task, session.locate_task, session.stream_task, session.tts_task):
+            if task and not task.done():
+                task.cancel()
+
+    def _engage_overlay(self, session: RequestSession) -> None:
+        if session.overlay_engaged:
+            return
+        session.overlay_engaged = True
+        self.sig_overlay_begin_request.emit()
+        self._log_session(session, "overlay engaged")
+
+    def _show_detected_point(self, session: RequestSession, x: float, y: float, label: str) -> None:
+        self._assert_active_session(session)
+        self._engage_overlay(session)
+        session.detected_point = (int(x), int(y), label)
+        self.sig_point_hold.emit(True)
+        self.sig_point_at.emit(float(x), float(y), label)
+        self._transition_session(session, "pointing_ready", label=label, x=int(x), y=int(y))
+
+    def _finish_request_session(
+        self,
+        session: Optional[RequestSession],
+        *,
+        final_phase: str,
+        error: str = "",
+    ) -> None:
+        if session is None or session.cleanup_done:
+            return
+        session.cleanup_done = True
+        if error:
+            session.error = error
+        self._cancel_session_tasks(session)
+        try:
+            from audio.playback import stop_audio
+            stop_audio()
+        except Exception:
+            pass
+        tts = self._tts
+        if tts and hasattr(tts, "stop"):
+            try:
+                tts.stop()
+            except Exception:
+                pass
+        self.sig_overlay_release_request.emit()
+        self.sig_overlay_reset.emit()
+        self._transition_session(session, final_phase, error=error or "")
+        if self._active_session is session:
+            self._active_session = None
+        self._current_task = None
+        self._emit_state(AppState.IDLE)
 
     # â”€â”€ Provider lazy init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -532,22 +719,29 @@ class CompanionManager(QObject):
     # â”€â”€ Input sources â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def on_hotkey_press(self):
-        if self._state != AppState.IDLE:
-            return
         logger.info("Hotkey triggered: press")
-        self._begin_capture()
+        session = self._start_request_session("hotkey")
+        if session is None:
+            return
+        self._begin_capture(session)
 
     def on_hotkey_release(self):
-        if self._state == AppState.LISTENING:
+        session = self._active_session
+        if session and self._state == AppState.LISTENING:
             logger.info("Hotkey triggered: release")
-            self._submit(self._end_capture_and_process())
+            fut = self._submit(self._run_request_session_pipeline(session))
+            if fut is not None:
+                self._current_task = fut
 
     def _handle_wake(self):
         """Triggered from ambient listener when wake-word is detected."""
-        if self._state != AppState.IDLE:
+        session = self._start_request_session("wake")
+        if session is None:
             return
-        self._begin_capture()
-        self._submit(self._auto_stop_after_pause())
+        self._begin_capture(session)
+        fut = self._submit(self._auto_stop_after_pause(session))
+        if fut is not None:
+            self._current_task = fut
 
     def _handle_level(self, rms: float):
         try:
@@ -694,12 +888,15 @@ class CompanionManager(QObject):
 
     # â”€â”€ Capture flow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-    def _begin_capture(self):
+    def _begin_capture(self, session: RequestSession):
         if not self._listener.audio_available:
             logger.warning("Mic start failed: audio backend unavailable")
             self.sig_transcription_error.emit("Mic not available")
+            self._finish_request_session(session, final_phase="failed", error="Mic not available")
             return
+        self._assert_active_session(session)
         logger.info("Capture begin: showing cursor overlay near cursor")
+        self._engage_overlay(session)
         self.sig_capture_started.emit()
         self.sig_transcription_text.emit("")
         self._listener.start_recording()
@@ -710,17 +907,19 @@ class CompanionManager(QObject):
             self.sig_transcription_text.emit("hello testing")
         self._start_live_transcription()
         self._emit_state(AppState.LISTENING)
+        self._transition_session(session, "capturing")
 
-    async def _auto_stop_after_pause(self):
+    async def _auto_stop_after_pause(self, session: RequestSession):
         """When triggered by wake word, wait for user to finish speaking."""
         import time
         max_total_s = 10.0
         start_t = time.monotonic()
-        while self._state == AppState.LISTENING:
+        while self._state == AppState.LISTENING and self._is_active_session(session):
             await asyncio.sleep(0.15)
             if time.monotonic() - start_t > max_total_s:
                 break
-        await self._end_capture_and_process()
+        if self._is_active_session(session):
+            await self._run_request_session_pipeline(session)
 
     async def _end_capture_and_process(self):
         logger.info("Mic stopped")
@@ -983,7 +1182,8 @@ class CompanionManager(QObject):
                     break
                 full_response += chunk
                 display_buf += chunk
-                self._parse_points(display_buf)
+                if self._active_session:
+                    self._parse_points(self._active_session, display_buf)
                 display_buf = ANY_TAG_RE.sub("", display_buf)
                 m = ANY_PARTIAL_RE.search(display_buf)
                 if m:
@@ -1065,6 +1265,328 @@ class CompanionManager(QObject):
                 self.sig_point_release.emit()
             self._emit_state(AppState.IDLE)
 
+    async def _run_request_session_pipeline(self, session: RequestSession):
+        logger.info("Mic stopped")
+        self._assert_active_session(session)
+        pcm = self._listener.stop_recording()
+        self._stop_live_transcription(final_pcm=pcm)
+        if len(pcm) < 3200:
+            self.sig_transcription_final.emit("")
+            self._finish_request_session(session, final_phase="cancelled", error="empty audio capture")
+            return
+
+        self._emit_state(AppState.THINKING)
+        self._transition_session(session, "capture_complete")
+
+        try:
+            transcript = await self._await_with_timeout(
+                session,
+                self._get_stt().transcribe(pcm),
+                STT_TIMEOUT_S,
+                "transcription_complete",
+                "Speech-to-text timed out",
+            )
+            session.transcript = transcript
+            logger.info("Final transcription received: %r", transcript)
+            if transcript.strip():
+                print("EMITTING:", transcript)
+                self.sig_transcription_text.emit(transcript)
+            self.sig_transcription_final.emit(transcript)
+            if not transcript.strip():
+                self._finish_request_session(session, final_phase="cancelled", error="blank transcription")
+                return
+
+            if is_stop(transcript):
+                self.stop()
+                return
+
+            title = active_window_title()
+            ak = app_key(title)
+
+            if is_next(transcript) and self._lesson_steps:
+                await self._advance_lesson_step(ak)
+                self._finish_request_session(session, final_phase="completed")
+                return
+
+            if is_repeat(transcript) and self._last_response:
+                await self._reply_local(self._last_response)
+                self._finish_request_session(session, final_phase="completed")
+                return
+
+            if is_journal_today(transcript):
+                msg = journal.summarise(journal.entries_today(), "Here's what you asked about today:\n")
+                await self._reply_local(msg)
+                self._finish_request_session(session, final_phase="completed")
+                return
+            if is_journal_week(transcript):
+                msg = journal.summarise(journal.entries_this_week(), "Here's the past week:\n")
+                await self._reply_local(msg)
+                self._finish_request_session(session, final_phase="completed")
+                return
+            if is_quiz_review(transcript):
+                await self._spaced_review()
+                self._finish_request_session(session, final_phase="completed")
+                return
+
+            try:
+                skill = skills_pkg.match(transcript)
+                if skill:
+                    msg = await skill["handler"](self, transcript)
+                    if msg:
+                        await self._reply_local(msg)
+                    self._finish_request_session(session, final_phase="completed")
+                    return
+            except Exception as e:
+                self.sig_error.emit(f"Skill error: {e}")
+
+            sensitive = self._privacy_guard and is_sensitive_window(title)
+            identity_q = is_identity_question(transcript)
+            if sensitive or identity_q:
+                screenshots = []
+                images_b64 = []
+            else:
+                shot = capture_primary()
+                screenshots = [shot] if shot else []
+                images_b64 = [shot.base64_jpeg] if shot else []
+                session.screenshot = shot
+
+            locate_triggered = is_locate(transcript)
+            multistep = is_multistep(transcript)
+
+            search_results = ""
+            if self._web_search_enabled:
+                from ai.web_search import search
+                session.search_task = asyncio.create_task(search(transcript))
+
+            if screenshots and locate_triggered:
+                shot = screenshots[0]
+                try:
+                    from ai.hybrid_pointer import find_target as _hybrid_find
+                    target = _hybrid_find(
+                        transcript,
+                        screenshot=shot,
+                        llm_provider=self._get_llm(),
+                    )
+                except Exception:
+                    target = None
+
+                if target is not None and target.source in ("uia", "ocr"):
+                    async def _ready(t=target):
+                        return t
+                    session.locate_task = asyncio.create_task(_ready())
+                elif cfg.anthropic_api_key:
+                    from ai.element_locator import detect_element
+                    session.locate_task = asyncio.create_task(detect_element(
+                        screenshot_jpeg_b64=shot.base64_jpeg,
+                        original_width=shot.width,
+                        original_height=shot.height,
+                        physical_width=shot.physical_width,
+                        physical_height=shot.physical_height,
+                        physical_left=shot.physical_left,
+                        physical_top=shot.physical_top,
+                        dpi_scale=shot.dpi_scale,
+                        screen_index=shot.index,
+                        user_question=transcript,
+                    ))
+                else:
+                    try:
+                        from ai.universal_locator import detect_element_universal
+                        llm = self._get_llm()
+                        session.locate_task = asyncio.create_task(detect_element_universal(
+                            llm=llm,
+                            screenshot_jpeg_b64=shot.base64_jpeg,
+                            original_width=shot.width,
+                            original_height=shot.height,
+                            physical_width=shot.physical_width,
+                            physical_height=shot.physical_height,
+                            physical_left=shot.physical_left,
+                            physical_top=shot.physical_top,
+                            dpi_scale=shot.dpi_scale,
+                            screen_index=shot.index,
+                            user_question=transcript,
+                            model=self._current_model,
+                        ))
+                    except Exception:
+                        session.locate_task = None
+
+            if session.search_task:
+                try:
+                    search_results = await self._await_with_timeout(
+                        session,
+                        session.search_task,
+                        SEARCH_TIMEOUT_S,
+                        "context_ready",
+                        "Web search timed out",
+                    ) or ""
+                except Exception:
+                    search_results = ""
+            else:
+                self._transition_session(session, "context_ready")
+
+            detected = None
+            detected_coord = None
+            if session.locate_task:
+                try:
+                    detected = await self._await_with_timeout(
+                        session,
+                        session.locate_task,
+                        LOCATOR_TIMEOUT_S,
+                        "context_ready",
+                        "UI element locator timed out",
+                    )
+                except Exception:
+                    detected = None
+            if detected:
+                label = _guess_label(transcript)
+                detected_coord = (int(detected.x), int(detected.y), label)
+                self._show_detected_point(session, float(detected.x), float(detected.y), label)
+
+            code_active = self._code_mode_auto and code_mode.is_code_window(title)
+            lang_code = multilang.detect_language(transcript) if self._multilang else "en"
+
+            ocr_extra = ""
+            if self._ocr_enabled and screenshots and ocr.needs_ocr(transcript):
+                try:
+                    import base64
+                    jpeg = base64.b64decode(screenshots[0].base64_jpeg)
+                    txt = ocr.run_ocr(jpeg)
+                    if txt:
+                        ocr_extra = ocr.format_for_prompt(txt)
+                except Exception:
+                    pass
+
+            doc_extra = ""
+            for fname, text in self._attached_docs:
+                doc_extra += pdf_context.format_for_prompt(fname, text)
+
+            system = _build_system_prompt(
+                window_title=title,
+                lesson_step=self._lesson_step_idx,
+                total_steps=len(self._lesson_steps),
+                quiz_mode=self._quiz_mode,
+                detected_coord=detected_coord,
+                code_active=code_active,
+                language_code=lang_code,
+                extra=ocr_extra + doc_extra,
+            )
+            if sensitive:
+                system += (
+                    "\n\nPRIVACY GUARD: the user's active window looks sensitive "
+                    "(password manager, banking, login). I did NOT take a "
+                    "screenshot. Answer from memory only, and tell the user you "
+                    "skipped the screenshot for safety.\n"
+                )
+            if search_results:
+                from ai.web_search import build_search_context
+                system += build_search_context(search_results)
+
+            history = self._app_memory.setdefault(ak, [])
+            full_response = ""
+            display_buf = ""
+            self.sig_response_reset.emit()
+            stream = self._get_llm().stream_response(
+                user_text=transcript,
+                screenshots_b64=images_b64,
+                history=history,
+                system_prompt=system,
+                model=self._current_model,
+            )
+            session.stream_task = asyncio.current_task()
+            self._transition_session(session, "llm_streaming")
+            first_chunk = await self._await_with_timeout(
+                session,
+                stream.__anext__(),
+                LLM_FIRST_TOKEN_TIMEOUT_S,
+                "llm_streaming",
+                "Language model timed out before the first token",
+            )
+
+            def _consume_chunk(chunk: str):
+                nonlocal full_response, display_buf
+                self._assert_active_session(session)
+                full_response += chunk
+                display_buf += chunk
+                self._parse_points(session, display_buf)
+                display_buf = ANY_TAG_RE.sub("", display_buf)
+                m = ANY_PARTIAL_RE.search(display_buf)
+                if m:
+                    flush = display_buf[: m.start()]
+                    display_buf = display_buf[m.start():]
+                else:
+                    flush = display_buf
+                    display_buf = ""
+                if flush:
+                    self.sig_response_chunk.emit(flush)
+
+            _consume_chunk(first_chunk)
+            async for chunk in stream:
+                _consume_chunk(chunk)
+            if display_buf:
+                self.sig_response_chunk.emit(ANY_TAG_RE.sub("", display_buf))
+
+            history.append(Message(role="user", content=transcript))
+            history.append(Message(role="assistant", content=full_response))
+            self._app_memory[ak] = history[-20:]
+
+            if multistep and not self._lesson_steps:
+                steps = _split_steps(full_response)
+                if len(steps) > 1:
+                    self._lesson_steps = steps
+                    self._lesson_step_idx = 0
+
+            clean = ANY_TAG_RE.sub("", full_response).strip()
+            self.sig_response_done.emit(clean)
+            self._last_response = clean
+
+            if self._journal_enabled and not self._quiz_mode:
+                try:
+                    journal.log_qa(
+                        question=transcript, answer=clean,
+                        app_key=ak, window_title=title,
+                        provider=cfg.llm_provider(),
+                        model=self._current_model or "",
+                    )
+                except Exception:
+                    pass
+
+            if self._recorder and self._recorder.is_recording:
+                self._recorder.log_question(transcript)
+                self._recorder.log_answer(clean)
+
+            if self._collab and self._collab.code:
+                try:
+                    await self._collab.send({"type": "qa", "q": transcript, "a": clean})
+                except Exception:
+                    pass
+
+            if self._multilang and lang_code != "en":
+                try:
+                    tts = self._get_tts()
+                    if hasattr(tts, "set_voice"):
+                        tts.set_voice(multilang.voice_for(lang_code))
+                except Exception:
+                    pass
+            self._emit_state(AppState.SPEAKING)
+            self._transition_session(session, "tts_speaking")
+            session.tts_task = asyncio.create_task(self._get_tts().speak(clean))
+            await self._await_with_timeout(
+                session,
+                session.tts_task,
+                TTS_TIMEOUT_S,
+                "completed",
+                "Text-to-speech timed out",
+            )
+
+        except SessionCancelled as e:
+            self._finish_request_session(session, final_phase="cancelled", error=str(e))
+            return
+        except Exception as e:
+            self.sig_error.emit(str(e))
+            self._finish_request_session(session, final_phase="failed", error=str(e))
+            return
+
+        self._finish_request_session(session, final_phase="completed")
+
     async def _reply_local(self, msg: str):
         """Show + speak a message that doesn't need an LLM round-trip."""
         self.sig_response_reset.emit()
@@ -1120,22 +1642,35 @@ class CompanionManager(QObject):
             pass
         self._emit_state(AppState.IDLE)
 
-    def _parse_points(self, text: str):
-        for match in POINT_RE.finditer(text):
-            x, y, label, _ = match.groups()
-            self.sig_point_at.emit(float(x), float(y), label.strip())
-        for match in ARROW_RE.finditer(text):
-            x1, y1, x2, y2 = (float(v) for v in match.groups())
-            self.sig_arrow.emit(x1, y1, x2, y2)
-        for match in CIRCLE_RE.finditer(text):
-            x, y, r, _label = match.groups()
-            self.sig_circle.emit(float(x), float(y), float(r))
-        for match in UNDERLINE_RE.finditer(text):
-            x, y, w = (float(v) for v in match.groups())
-            self.sig_underline.emit(x, y, w)
-        for match in LABEL_RE.finditer(text):
-            x, y, txt = match.groups()
-            self.sig_label.emit(float(x), float(y), txt.strip())
+    def _parse_points(self, session: RequestSession, text: str):
+        self._assert_active_session(session)
+        for regex, kind in (
+            (POINT_RE, "point"),
+            (ARROW_RE, "arrow"),
+            (CIRCLE_RE, "circle"),
+            (UNDERLINE_RE, "underline"),
+            (LABEL_RE, "label"),
+        ):
+            for match in regex.finditer(text):
+                raw = match.group(0)
+                if raw in session.seen_tags:
+                    continue
+                session.seen_tags.add(raw)
+                if kind == "point":
+                    x, y, label, _ = match.groups()
+                    self._show_detected_point(session, float(x), float(y), label.strip())
+                elif kind == "arrow":
+                    x1, y1, x2, y2 = (float(v) for v in match.groups())
+                    self.sig_arrow.emit(x1, y1, x2, y2)
+                elif kind == "circle":
+                    x, y, r, _label = match.groups()
+                    self.sig_circle.emit(float(x), float(y), float(r))
+                elif kind == "underline":
+                    x, y, w = (float(v) for v in match.groups())
+                    self.sig_underline.emit(x, y, w)
+                else:
+                    x, y, txt = match.groups()
+                    self.sig_label.emit(float(x), float(y), txt.strip())
 
     def _emit_state(self, state: AppState):
         self._state = state
@@ -1248,18 +1783,23 @@ class CompanionManager(QObject):
         if enabled and not was:
             # Kick off the first question immediately so the user doesn't
             # have to ask "begin quiz". Uses the active screen as context.
-            self._submit(self._kickoff_quiz())
+            session = self._start_request_session("quiz")
+            if session is not None:
+                fut = self._submit(self._kickoff_quiz(session))
+                if fut is not None:
+                    self._current_task = fut
 
-    async def _kickoff_quiz(self):
+    async def _kickoff_quiz(self, session: RequestSession):
         """Called when quiz mode flips ON â€” generates the first question
         without waiting for a user utterance."""
-        if self._state != AppState.IDLE:
-            return
         try:
+            self._engage_overlay(session)
             self._emit_state(AppState.THINKING)
+            self._transition_session(session, "context_ready")
             shot = capture_primary()
             screenshots = [shot] if shot else []
             images_b64 = [shot.base64_jpeg] if shot else []
+            session.screenshot = shot
             title = active_window_title()
             system = _build_system_prompt(
                 window_title=title, quiz_mode=True,
@@ -1268,27 +1808,47 @@ class CompanionManager(QObject):
             history = self._app_memory.setdefault(ak, [])
 
             full = ""
-            async for chunk in self._get_llm().stream_response(
+            stream = self._get_llm().stream_response(
                 user_text="(quiz mode just enabled â€” start the quiz now)",
                 screenshots_b64=images_b64,
                 history=history,
                 system_prompt=system,
                 model=self._current_model,
-            ):
-                if self._cancel_flag:
-                    break
+            )
+            session.stream_task = asyncio.current_task()
+            self._transition_session(session, "llm_streaming")
+            first_chunk = await self._await_with_timeout(
+                session,
+                stream.__anext__(),
+                LLM_FIRST_TOKEN_TIMEOUT_S,
+                "llm_streaming",
+                "Quiz start timed out before the first token",
+            )
+            full += first_chunk
+            self.sig_response_chunk.emit(first_chunk)
+            async for chunk in stream:
+                self._assert_active_session(session)
                 full += chunk
                 self.sig_response_chunk.emit(chunk)
             self.sig_response_done.emit(full)
             self._emit_state(AppState.SPEAKING)
-            try:
-                await self._get_tts().speak(full)
-            except Exception:
-                pass
+            self._transition_session(session, "tts_speaking")
+            session.tts_task = asyncio.create_task(self._get_tts().speak(full))
+            await self._await_with_timeout(
+                session,
+                session.tts_task,
+                TTS_TIMEOUT_S,
+                "completed",
+                "Quiz speech timed out",
+            )
+        except SessionCancelled as e:
+            self._finish_request_session(session, final_phase="cancelled", error=str(e))
+            return
         except Exception as e:
             self.sig_error.emit(f"Quiz start failed: {e}")
-        finally:
-            self._emit_state(AppState.IDLE)
+            self._finish_request_session(session, final_phase="failed", error=f"Quiz start failed: {e}")
+            return
+        self._finish_request_session(session, final_phase="completed")
 
     def set_privacy_guard(self, enabled: bool):
         self._privacy_guard = enabled
@@ -1400,7 +1960,22 @@ class CompanionManager(QObject):
 
     def stop(self):
         """Cancel the current LLM stream + any in-flight TTS. Bound to Esc."""
-        self._cancel_flag = True
+        if self._active_session is not None:
+            session = self._active_session
+            self._mark_session_cancelled(session, "stopped by user")
+            if self._state == AppState.LISTENING:
+                try:
+                    self._listener.stop_recording()
+                except Exception:
+                    pass
+                self._stop_live_transcription()
+            if self._current_task and not self._current_task.done():
+                self._current_task.cancel()
+            self._lesson_steps = []
+            self._lesson_step_idx = 0
+            self._finish_request_session(session, final_phase="cancelled", error="stopped by user")
+            return
+        session = self._active_session
         # Kill audio playback immediately â€” flips the global stop event so
         # the chunked PortAudio loop bails out within ~50 ms.
         try:

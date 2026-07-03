@@ -17,6 +17,7 @@ from typing import Optional, Tuple
 import httpx
 from PIL import Image
 
+from ai.debug_image import save_model_visible_image
 from config import cfg
 
 
@@ -96,6 +97,17 @@ async def detect_element(
     jpeg_bytes = base64.b64decode(screenshot_jpeg_b64)
     resized_bytes = _resize_jpeg(jpeg_bytes, tw, th)
     resized_b64 = base64.b64encode(resized_bytes).decode("ascii")
+    save_model_visible_image(
+        resized_b64,
+        context="claude-locator",
+        metadata={
+            "provider": "claude",
+            "model": model,
+            "target_width": tw,
+            "target_height": th,
+            "screen_index": screen_index,
+        },
+    )
 
     user_prompt = (
         f'The user asked this question while looking at their screen: "{user_question}"\n\n'
