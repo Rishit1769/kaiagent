@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import asyncio
+import logging
 from enum import Enum, auto
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
@@ -31,6 +32,9 @@ from ui.design import (
     STATE_SPEAKING,
     STATE_THINKING,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class AppState(Enum):
@@ -333,6 +337,11 @@ class CompanionPanel(QWidget):
         self._response_text = text
         self._response_label.setText(text)
 
+    def update_transcription(self, text: str):
+        self._response_text = text
+        self._response_label.setText(text)
+        logger.info("UI transcription updated: %r", text)
+
     def append_response_chunk(self, chunk: str):
         self._response_text += chunk
         self._response_label.setText(self._response_text)
@@ -343,6 +352,12 @@ class CompanionPanel(QWidget):
     def clear_response(self):
         self._response_text = ""
         self._response_label.setText("")
+
+    def prepare_for_transcription(self):
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        self.clear_response()
 
     def show_copilot_code(self, user_code: str, verification_uri: str):
         self._sig_copilot_code.emit(user_code, verification_uri)

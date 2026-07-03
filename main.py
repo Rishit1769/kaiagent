@@ -5,6 +5,7 @@ Boots Qt, spawns overlay+panel+tray, starts ambient mic listener, binds hotkey.
 """
 
 import os
+import logging
 import sys
 from pathlib import Path
 
@@ -60,6 +61,10 @@ def _copilot_login_flow(tray, panel, manager):
 
 
 def main():
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    )
     QApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
     )
@@ -79,6 +84,9 @@ def main():
         overlay.set_mode(STATE_TO_CURSOR_MODE.get(state, MODE_IDLE))
 
     manager.sig_state_changed.connect(_on_state)
+    manager.sig_capture_started.connect(panel.prepare_for_transcription)
+    manager.sig_transcription_text.connect(panel.update_transcription)
+    manager.sig_response_reset.connect(panel.clear_response)
     manager.sig_response_chunk.connect(panel.append_response_chunk)
     manager.sig_audio_level.connect(panel.set_audio_level)
     manager.sig_audio_level.connect(overlay.set_audio_level)

@@ -88,6 +88,7 @@ class AmbientListener:
 
         # Recording buffer (hotkey push-to-talk OR post-wake capture)
         self._rec_buffer: list[bytes] = []
+        self._rec_lock = threading.Lock()
 
         # Lazy tiny whisper for wake word
         self._wake_model = None
@@ -130,16 +131,23 @@ class AmbientListener:
 
     def start_recording(self) -> None:
         """Switch to RECORDING mode; all audio buffered for STT."""
-        self._rec_buffer = []
+        with self._rec_lock:
+            self._rec_buffer = []
         self._mode = Mode.RECORDING
 
     def stop_recording(self) -> bytes:
         """Return buffered PCM16 bytes and resume standby."""
-        pcm = b"".join(self._rec_buffer)
-        self._rec_buffer = []
+        with self._rec_lock:
+            pcm = b"".join(self._rec_buffer)
+            self._rec_buffer = []
         self._mode = Mode.STANDBY
         self._reset_segment()
         return pcm
+
+    def snapshot_recording(self) -> bytes:
+        """Return a thread-safe snapshot of the current recording buffer."""
+        with self._rec_lock:
+            return b"".join(self._rec_buffer)
 
     def set_wake_word_enabled(self, enabled: bool):
         self._wake_word_enabled = enabled
@@ -168,7 +176,8 @@ class AmbientListener:
         self._on_level(rms)
 
         if self._mode == Mode.RECORDING:
-            self._rec_buffer.append(pcm_int16.tobytes())
+            with self._rec_lock:
+                self._rec_buffer.append(pcm_int16.tobytes())
             return
 
         # Standby: VAD-based segment capture for wake-word

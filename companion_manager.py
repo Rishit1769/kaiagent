@@ -7,6 +7,7 @@ Orchestrates:
 """
 
 import asyncio
+import logging
 import re
 import threading
 import time
@@ -18,6 +19,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from config import cfg
 from ai.base_provider import BaseLLMProvider, Message
 from audio.ambient_listener import AmbientListener
+from audio.capture import pcm16_to_wav
 from screen.capture import capture_all_screens, capture_primary
 from ui.panel import AppState
 from tutor import (
@@ -31,6 +33,51 @@ from tutor_features import (
     multilang, workflow_capture, collab,
 )
 import skills as skills_pkg
+
+
+logger = logging.getLogger(__name__)
+_preview_model_cache = None
+
+LIVE_TRANSCRIBE_POLL_S = 0.45
+LIVE_TRANSCRIBE_MIN_BYTES = 16000
+LIVE_TRANSCRIBE_MAX_BYTES = 16000 * 2 * 8
+
+
+def _get_preview_model():
+    global _preview_model_cache
+    if _preview_model_cache is None:
+        from faster_whisper import WhisperModel
+
+        _preview_model_cache = WhisperModel(
+            cfg.whisper_model,
+            device="cpu",
+            compute_type="int8",
+        )
+    return _preview_model_cache
+
+
+def _transcribe_preview_pcm(pcm_bytes: bytes) -> str:
+    import os
+    import tempfile
+
+    if not pcm_bytes:
+        return ""
+    model = _get_preview_model()
+    wav_bytes = pcm16_to_wav(pcm_bytes)
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+        f.write(wav_bytes)
+        path = f.name
+    try:
+        segments, _ = model.transcribe(
+            path,
+            beam_size=1,
+            language="en",
+            condition_on_previous_text=True,
+            vad_filter=True,
+        )
+        return " ".join(s.text.strip() for s in segments).strip()
+    finally:
+        os.unlink(path)
 
 
 def _ensure_ollama_running():
@@ -236,6 +283,9 @@ class CompanionManager(QObject):
     """Thread-safe signals for Qt UI updates from async/audio threads."""
 
     sig_state_changed       = pyqtSignal(object)          # AppState
+    sig_capture_started     = pyqtSignal()
+    sig_transcription_text  = pyqtSignal(str)
+    sig_response_reset      = pyqtSignal()
     sig_response_chunk      = pyqtSignal(str)
     sig_response_done       = pyqtSignal(str)
     sig_audio_level         = pyqtSignal(float)
@@ -269,6 +319,9 @@ class CompanionManager(QObject):
         # Current in-flight generation â€” tracked so Esc / stop can cancel
         self._current_task: Optional[asyncio.Future] = None
         self._cancel_flag = False
+        self._live_transcription_stop = threading.Event()
+        self._live_transcription_thread: Optional[threading.Thread] = None
+        self._live_transcription_text = ""
 
         # Per-app memory: { window_title: [Message, ...] }
         self._app_memory: dict[str, List[Message]] = {}
@@ -457,10 +510,12 @@ class CompanionManager(QObject):
     def on_hotkey_press(self):
         if self._state != AppState.IDLE:
             return
+        logger.info("Hotkey triggered: press")
         self._begin_capture()
 
     def on_hotkey_release(self):
         if self._state == AppState.LISTENING:
+            logger.info("Hotkey triggered: release")
             self._submit(self._end_capture_and_process())
 
     def _handle_wake(self):
@@ -476,10 +531,64 @@ class CompanionManager(QObject):
         except Exception:
             pass   # never crash the sounddevice audio thread
 
+    def _start_live_transcription(self):
+        self._live_transcription_stop.set()
+        if self._live_transcription_thread and self._live_transcription_thread.is_alive():
+            self._live_transcription_thread.join(timeout=0.2)
+        self._live_transcription_text = ""
+        self._live_transcription_stop = threading.Event()
+        self._live_transcription_thread = threading.Thread(
+            target=self._live_transcription_worker,
+            name="kai-live-transcription",
+            daemon=True,
+        )
+        self._live_transcription_thread.start()
+
+    def _stop_live_transcription(self, final_pcm: bytes | None = None):
+        self._live_transcription_stop.set()
+        thread = self._live_transcription_thread
+        if thread and thread.is_alive():
+            thread.join(timeout=0.5)
+        self._live_transcription_thread = None
+        if final_pcm and len(final_pcm) >= LIVE_TRANSCRIBE_MIN_BYTES:
+            try:
+                final_text = _transcribe_preview_pcm(final_pcm[-LIVE_TRANSCRIBE_MAX_BYTES:])
+                if final_text:
+                    self._live_transcription_text = final_text
+                    logger.debug("Final live transcription preview: %r", final_text)
+                    self.sig_transcription_text.emit(final_text)
+            except Exception as e:
+                logger.debug("Final live transcription preview failed: %s", e)
+
+    def _live_transcription_worker(self):
+        last_len = 0
+        while not self._live_transcription_stop.is_set():
+            try:
+                pcm = self._listener.snapshot_recording()
+                if len(pcm) < LIVE_TRANSCRIBE_MIN_BYTES or len(pcm) == last_len:
+                    time.sleep(LIVE_TRANSCRIBE_POLL_S)
+                    continue
+                last_len = len(pcm)
+                preview_pcm = pcm[-LIVE_TRANSCRIBE_MAX_BYTES:]
+                text = _transcribe_preview_pcm(preview_pcm)
+                if text and text != self._live_transcription_text:
+                    self._live_transcription_text = text
+                    logger.info("Transcription chunk received: %r", text)
+                    self.sig_transcription_text.emit(text)
+            except Exception as e:
+                logger.debug("Live transcription worker error: %s", e)
+                time.sleep(LIVE_TRANSCRIBE_POLL_S)
+                continue
+            time.sleep(LIVE_TRANSCRIBE_POLL_S)
+
     # â”€â”€ Capture flow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _begin_capture(self):
+        self.sig_capture_started.emit()
+        self.sig_transcription_text.emit("")
         self._listener.start_recording()
+        logger.info("Mic started")
+        self._start_live_transcription()
         self._emit_state(AppState.LISTENING)
 
     async def _auto_stop_after_pause(self):
@@ -495,6 +604,7 @@ class CompanionManager(QObject):
 
     async def _end_capture_and_process(self):
         pcm = self._listener.stop_recording()
+        self._stop_live_transcription(final_pcm=pcm)
         if len(pcm) < 3200:  # < 0.1s of audio â€” ignore
             self._emit_state(AppState.IDLE)
             return
@@ -505,6 +615,9 @@ class CompanionManager(QObject):
         try:
             # 1. Transcribe
             transcript = await self._get_stt().transcribe(pcm)
+            logger.info("Final transcription received: %r", transcript)
+            if transcript.strip():
+                self.sig_transcription_text.emit(transcript)
             if not transcript.strip():
                 self._emit_state(AppState.IDLE)
                 return
@@ -523,6 +636,7 @@ class CompanionManager(QObject):
 
             # "say it again" â€” replay the last response without a new LLM call
             if is_repeat(transcript) and self._last_response:
+                self.sig_response_reset.emit()
                 self.sig_response_chunk.emit(self._last_response)
                 self.sig_response_done.emit(self._last_response)
                 self._emit_state(AppState.SPEAKING)
@@ -729,6 +843,7 @@ class CompanionManager(QObject):
             full_response = ""
             display_buf = ""
             self._cancel_flag = False
+            self.sig_response_reset.emit()
             async for chunk in self._get_llm().stream_response(
                 user_text=transcript,
                 screenshots_b64=images_b64,
@@ -824,6 +939,7 @@ class CompanionManager(QObject):
 
     async def _reply_local(self, msg: str):
         """Show + speak a message that doesn't need an LLM round-trip."""
+        self.sig_response_reset.emit()
         self.sig_response_chunk.emit(msg)
         self.sig_response_done.emit(msg)
         self._last_response = msg
@@ -866,6 +982,7 @@ class CompanionManager(QObject):
             total = len(self._lesson_steps)
             msg = f"Step {self._lesson_step_idx + 1} of {total}: {step}"
 
+        self.sig_response_reset.emit()
         self.sig_response_chunk.emit(msg)
         self.sig_response_done.emit(msg)
         self._emit_state(AppState.SPEAKING)
