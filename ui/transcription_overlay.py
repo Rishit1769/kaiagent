@@ -1,7 +1,7 @@
 import math
 import logging
 
-from PyQt6.QtCore import QEasingCurve, QPoint, QPropertyAnimation, QTimer, Qt, pyqtProperty
+from PyQt6.QtCore import QEasingCurve, QPoint, QPropertyAnimation, QRectF, QTimer, Qt, pyqtProperty
 from PyQt6.QtGui import QColor, QCursor, QFontMetrics, QLinearGradient, QPainter, QPainterPath, QPen, QRadialGradient
 from PyQt6.QtWidgets import QApplication, QWidget
 
@@ -211,67 +211,82 @@ class TranscriptionOverlay(QWidget):
     overlayOpacity = pyqtProperty(float, fget=get_overlay_opacity, fset=set_overlay_opacity)
 
     def paintEvent(self, event):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        p.setOpacity(self._overlay_opacity)
-        rect = self.rect().adjusted(10, 10, -10, -10)
-        path = QPainterPath()
-        path.addRoundedRect(rect, 15, 15)
+        painter = QPainter(self)
+        try:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setOpacity(self._overlay_opacity)
 
-        glow_color = QColor(BLUE_GLOW)
-        glow_color.setAlpha(36)
-        for inset, alpha in ((18, 22), (10, 38), (4, 56)):
-            outer = self.rect().adjusted(inset, inset, -inset, -inset)
-            p.setPen(Qt.PenStyle.NoPen)
-            c = QColor(glow_color)
-            c.setAlpha(alpha)
-            p.setBrush(c)
-            p.drawRoundedRect(outer, 20, 20)
+            rect = QRectF(self.rect()).adjusted(10.0, 10.0, -10.0, -10.0)
+            if rect.width() <= 0 or rect.height() <= 0:
+                return
 
-        fill = QLinearGradient(rect.topLeft(), rect.bottomLeft())
-        fill.setColorAt(0.0, QColor(34, 38, 54, 158))
-        fill.setColorAt(0.25, QColor(26, 28, 42, 130))
-        fill.setColorAt(1.0, QColor(20, 20, 30, 102))
-        p.fillPath(path, fill)
+            path = QPainterPath()
+            path.addRoundedRect(rect, 15.0, 15.0)
 
-        gloss = QLinearGradient(rect.left(), rect.top(), rect.right(), rect.bottom())
-        gloss.setColorAt(0.0, QColor(255, 255, 255, 44))
-        gloss.setColorAt(0.35, QColor(200, 220, 255, 12))
-        gloss.setColorAt(1.0, QColor(255, 255, 255, 0))
-        p.fillPath(path, gloss)
+            glow_color = QColor(BLUE_GLOW)
+            glow_color.setAlpha(36)
+            for inset, alpha in ((18.0, 22), (10.0, 38), (4.0, 56)):
+                outer = QRectF(self.rect()).adjusted(inset, inset, -inset, -inset)
+                if outer.width() <= 0 or outer.height() <= 0:
+                    continue
+                painter.setPen(Qt.PenStyle.NoPen)
+                c = QColor(glow_color)
+                c.setAlpha(alpha)
+                painter.setBrush(c)
+                painter.drawRoundedRect(outer, 20.0, 20.0)
 
-        p.setPen(QPen(QColor(140, 180, 255, 78), 1.2))
-        p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawPath(path)
+            fill = QLinearGradient(rect.topLeft(), rect.bottomLeft())
+            fill.setColorAt(0.0, QColor(34, 38, 54, 158))
+            fill.setColorAt(0.25, QColor(26, 28, 42, 130))
+            fill.setColorAt(1.0, QColor(20, 20, 30, 102))
+            painter.fillPath(path, fill)
 
-        orb_center = QPoint(40, self.height() // 2)
-        pulse = 1.0 + 0.08 * math.sin(self._orb_phase) + self._audio_level * 0.22
-        outer = QRadialGradient(orb_center, 26 * pulse)
-        outer.setColorAt(0.0, QColor(110, 180, 255, 155))
-        outer.setColorAt(0.55, QColor(40, 140, 255, 72))
-        outer.setColorAt(1.0, QColor(40, 140, 255, 0))
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(outer)
-        p.drawEllipse(orb_center, int(26 * pulse), int(26 * pulse))
+            gloss = QLinearGradient(rect.topLeft(), rect.bottomRight())
+            gloss.setColorAt(0.0, QColor(255, 255, 255, 44))
+            gloss.setColorAt(0.35, QColor(200, 220, 255, 12))
+            gloss.setColorAt(1.0, QColor(255, 255, 255, 0))
+            painter.fillPath(path, gloss)
 
-        mid = QRadialGradient(orb_center, 12 * pulse)
-        mid.setColorAt(0.0, QColor(220, 245, 255, 255))
-        mid.setColorAt(0.45, QColor(90, 180, 255, 235))
-        mid.setColorAt(1.0, QColor(36, 115, 255, 210))
-        p.setBrush(mid)
-        p.drawEllipse(orb_center, int(12 * pulse), int(12 * pulse))
+            painter.setPen(QPen(QColor(140, 180, 255, 78), 1.2))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawPath(path)
 
-        ring = QColor(190, 225, 255, 120)
-        p.setPen(QPen(ring, 1.3))
-        p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawEllipse(orb_center, int(14 * pulse), int(14 * pulse))
+            orb_center = QPoint(40, self.height() // 2)
+            pulse = 1.0 + 0.08 * math.sin(self._orb_phase) + self._audio_level * 0.22
+            outer = QRadialGradient(orb_center, 26 * pulse)
+            outer.setColorAt(0.0, QColor(110, 180, 255, 155))
+            outer.setColorAt(0.55, QColor(40, 140, 255, 72))
+            outer.setColorAt(1.0, QColor(40, 140, 255, 0))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(outer)
+            painter.drawEllipse(orb_center, int(26 * pulse), int(26 * pulse))
 
-        text_rect = rect.adjusted(66, 14, -18, -14)
-        p.setFont(FONT_RESPONSE)
-        text_color = QColor(TEXT_SECONDARY if self._show_placeholder else TEXT_PRIMARY)
-        if self._mic_error:
-            text_color = QColor(255, 210, 210)
-        text_color.setAlpha(int(255 * self._text_opacity))
-        p.setPen(text_color)
-        p.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.TextFlag.TextWordWrap, self._current_text())
-        p.end()
+            mid = QRadialGradient(orb_center, 12 * pulse)
+            mid.setColorAt(0.0, QColor(220, 245, 255, 255))
+            mid.setColorAt(0.45, QColor(90, 180, 255, 235))
+            mid.setColorAt(1.0, QColor(36, 115, 255, 210))
+            painter.setBrush(mid)
+            painter.drawEllipse(orb_center, int(12 * pulse), int(12 * pulse))
+
+            ring = QColor(190, 225, 255, 120)
+            painter.setPen(QPen(ring, 1.3))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawEllipse(orb_center, int(14 * pulse), int(14 * pulse))
+
+            text_rect = rect.adjusted(66.0, 14.0, -18.0, -14.0)
+            painter.setFont(FONT_RESPONSE)
+            text_color = QColor(TEXT_SECONDARY if self._show_placeholder else TEXT_PRIMARY)
+            if self._mic_error:
+                text_color = QColor(255, 210, 210)
+            text_color.setAlpha(int(255 * self._text_opacity))
+            painter.setPen(text_color)
+            painter.drawText(
+                text_rect,
+                Qt.AlignmentFlag.AlignVCenter | Qt.TextFlag.TextWordWrap,
+                self._current_text(),
+            )
+        except Exception:
+            logger.exception("Transcription overlay paintEvent failed")
+        finally:
+            if painter.isActive():
+                painter.end()
