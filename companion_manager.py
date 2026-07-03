@@ -40,9 +40,12 @@ logger = logging.getLogger(__name__)
 _preview_model_cache = None
 
 PCM_BYTES_PER_SECOND = 16000 * 2
-LIVE_TRANSCRIBE_POLL_S = 0.2
-LIVE_TRANSCRIBE_CHUNK_S = 0.5
+LIVE_TRANSCRIBE_POLL_S = 0.1
+LIVE_TRANSCRIBE_CHUNK_S = 0.3
 LIVE_TRANSCRIBE_CHUNK_BYTES = int(PCM_BYTES_PER_SECOND * LIVE_TRANSCRIBE_CHUNK_S)
+LIVE_TRANSCRIBE_WINDOW_S = 2.0
+LIVE_TRANSCRIBE_WINDOW_BYTES = int(PCM_BYTES_PER_SECOND * LIVE_TRANSCRIBE_WINDOW_S)
+LIVE_TRANSCRIBE_DECODE_INTERVAL_S = 0.35
 LIVE_TRANSCRIBE_FINAL_MIN_S = 0.35
 LIVE_TRANSCRIBE_FINAL_MIN_BYTES = int(PCM_BYTES_PER_SECOND * LIVE_TRANSCRIBE_FINAL_MIN_S)
 
@@ -78,7 +81,7 @@ def _transcribe_preview_segments(pcm_bytes: bytes) -> list[str]:
             beam_size=1,
             language="en",
             condition_on_previous_text=False,
-            vad_filter=False,
+            vad_filter=True,
             no_speech_threshold=0.2,
             temperature=0.0,
         )
@@ -339,7 +342,9 @@ class CompanionManager(QObject):
         self._live_transcription_stop = threading.Event()
         self._live_transcription_thread: Optional[threading.Thread] = None
         self._live_transcription_text = ""
-        self._live_transcription_parts: list[str] = []
+        self._live_transcription_stable_text = ""
+        self._live_transcription_live_text = ""
+        self._live_transcription_last_decode_at = 0.0
         self._live_transcription_processed_bytes = 0
 
         # Per-app memory: { window_title: [Message, ...] }
@@ -556,7 +561,9 @@ class CompanionManager(QObject):
         if self._live_transcription_thread and self._live_transcription_thread.is_alive():
             self._live_transcription_thread.join(timeout=0.2)
         self._live_transcription_text = ""
-        self._live_transcription_parts = []
+        self._live_transcription_stable_text = ""
+        self._live_transcription_live_text = ""
+        self._live_transcription_last_decode_at = 0.0
         self._live_transcription_processed_bytes = 0
         self._live_transcription_stop = threading.Event()
         self._live_transcription_thread = threading.Thread(
@@ -575,15 +582,23 @@ class CompanionManager(QObject):
         self._live_transcription_thread = None
         if final_pcm and len(final_pcm) >= LIVE_TRANSCRIBE_FINAL_MIN_BYTES:
             try:
-                tail_start = self._live_transcription_processed_bytes
-                tail_pcm = final_pcm[tail_start:]
-                if len(tail_pcm) >= LIVE_TRANSCRIBE_FINAL_MIN_BYTES:
-                    tail_segments = _transcribe_preview_segments(tail_pcm)
+                window_pcm = final_pcm[-LIVE_TRANSCRIBE_WINDOW_BYTES:]
+                if len(window_pcm) >= LIVE_TRANSCRIBE_FINAL_MIN_BYTES:
+                    tail_segments = _transcribe_preview_segments(window_pcm)
                     if tail_segments:
-                        self._live_transcription_parts.extend(tail_segments)
-                final_text = " ".join(self._live_transcription_parts).strip()
+                        stable_candidate = " ".join(tail_segments[:-1]).strip()
+                        live_candidate = tail_segments[-1].strip()
+                        self._live_transcription_stable_text = self._merge_preview_text(
+                            self._live_transcription_stable_text,
+                            stable_candidate,
+                        )
+                        self._live_transcription_live_text = live_candidate
+                        self._live_transcription_text = self._compose_preview_text(
+                            self._live_transcription_stable_text,
+                            self._live_transcription_live_text,
+                        )
+                final_text = self._live_transcription_text.strip()
                 if final_text:
-                    self._live_transcription_text = final_text
                     logger.info("Final live transcription preview emitted: %r", final_text)
                     print("EMITTING:", final_text)
                     self.sig_transcription_text.emit(final_text)
@@ -592,7 +607,7 @@ class CompanionManager(QObject):
 
     def _live_transcription_worker(self):
         consumed_bytes = 0
-        pending_pcm = bytearray()
+        rolling_pcm = bytearray()
         while not self._live_transcription_stop.is_set():
             try:
                 pcm = self._listener.snapshot_recording()
@@ -601,32 +616,81 @@ class CompanionManager(QObject):
                     continue
                 new_pcm = pcm[consumed_bytes:]
                 consumed_bytes = len(pcm)
-                pending_pcm.extend(new_pcm)
+                rolling_pcm.extend(new_pcm)
+                if len(rolling_pcm) > LIVE_TRANSCRIBE_WINDOW_BYTES:
+                    del rolling_pcm[:-LIVE_TRANSCRIBE_WINDOW_BYTES]
                 print("chunk captured", len(new_pcm))
-                logger.info("Audio chunk captured: %s bytes pending=%s", len(new_pcm), len(pending_pcm))
-                while len(pending_pcm) >= LIVE_TRANSCRIBE_CHUNK_BYTES:
-                    chunk_pcm = bytes(pending_pcm[:LIVE_TRANSCRIBE_CHUNK_BYTES])
-                    del pending_pcm[:LIVE_TRANSCRIBE_CHUNK_BYTES]
-                    logger.info("Processing live transcription chunk: %s bytes", len(chunk_pcm))
-                    segments = _transcribe_preview_segments(chunk_pcm)
-                    logger.info("Chunk processed into %s segment(s)", len(segments))
-                    self._live_transcription_processed_bytes += len(chunk_pcm)
-                    if not segments:
-                        continue
-                    chunk_text = " ".join(segments).strip()
-                    print("transcribed chunk", chunk_text)
-                    self._live_transcription_parts.extend(segments)
-                    text = " ".join(self._live_transcription_parts).strip()
-                    if text and text != self._live_transcription_text:
-                        self._live_transcription_text = text
-                        print("EMITTING:", text)
-                        logger.info("Text emitted to UI: %r", text)
-                        self.sig_transcription_text.emit(text)
+                buffer_duration = len(rolling_pcm) / PCM_BYTES_PER_SECOND
+                print("buffer duration", round(buffer_duration, 2))
+                logger.info(
+                    "Audio chunk captured: %s bytes rolling=%s duration=%.2fs",
+                    len(new_pcm),
+                    len(rolling_pcm),
+                    buffer_duration,
+                )
+                if len(rolling_pcm) < LIVE_TRANSCRIBE_CHUNK_BYTES:
+                    time.sleep(LIVE_TRANSCRIBE_POLL_S)
+                    continue
+                now = time.monotonic()
+                if (
+                    self._live_transcription_last_decode_at
+                    and now - self._live_transcription_last_decode_at < LIVE_TRANSCRIBE_DECODE_INTERVAL_S
+                ):
+                    time.sleep(LIVE_TRANSCRIBE_POLL_S)
+                    continue
+                self._live_transcription_last_decode_at = now
+                window_pcm = bytes(rolling_pcm)
+                logger.info("Processing live transcription window: %s bytes", len(window_pcm))
+                segments = _transcribe_preview_segments(window_pcm)
+                logger.info("Chunk processed into %s segment(s)", len(segments))
+                print("segments count", len(segments))
+                self._live_transcription_processed_bytes = consumed_bytes
+                if not segments:
+                    continue
+                stable_candidate = " ".join(segments[:-1]).strip()
+                live_candidate = segments[-1].strip()
+                print("transcribed chunk", live_candidate)
+                merged_stable = self._merge_preview_text(
+                    self._live_transcription_stable_text,
+                    stable_candidate,
+                )
+                merged_text = self._compose_preview_text(merged_stable, live_candidate)
+                if merged_text and merged_text != self._live_transcription_text:
+                    self._live_transcription_stable_text = merged_stable
+                    self._live_transcription_live_text = live_candidate
+                    self._live_transcription_text = merged_text
+                    print("EMITTING:", merged_text)
+                    logger.info("Text emitted to UI: %r", merged_text)
+                    self.sig_transcription_text.emit(merged_text)
             except Exception as e:
                 logger.debug("Live transcription worker error: %s", e)
                 time.sleep(LIVE_TRANSCRIBE_POLL_S)
                 continue
             time.sleep(LIVE_TRANSCRIBE_POLL_S)
+
+    @staticmethod
+    def _merge_preview_text(previous: str, latest: str) -> str:
+        previous = previous.strip()
+        latest = latest.strip()
+        if not previous:
+            return latest
+        if not latest:
+            return previous
+        if latest.startswith(previous):
+            return latest
+        max_overlap = min(len(previous), len(latest))
+        for overlap in range(max_overlap, 0, -1):
+            if previous.endswith(latest[:overlap]):
+                return previous + latest[overlap:]
+        return latest if len(latest) >= len(previous) else previous
+
+    @staticmethod
+    def _compose_preview_text(stable_text: str, live_text: str) -> str:
+        stable_text = stable_text.strip()
+        live_text = live_text.strip()
+        if stable_text and live_text:
+            return f"{stable_text} {live_text}".strip()
+        return stable_text or live_text
 
     # â”€â”€ Capture flow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
