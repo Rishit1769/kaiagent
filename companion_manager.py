@@ -38,9 +38,12 @@ import skills as skills_pkg
 logger = logging.getLogger(__name__)
 _preview_model_cache = None
 
-LIVE_TRANSCRIBE_POLL_S = 0.45
-LIVE_TRANSCRIBE_MIN_BYTES = 16000
-LIVE_TRANSCRIBE_MAX_BYTES = 16000 * 2 * 8
+PCM_BYTES_PER_SECOND = 16000 * 2
+LIVE_TRANSCRIBE_POLL_S = 0.2
+LIVE_TRANSCRIBE_CHUNK_S = 0.8
+LIVE_TRANSCRIBE_CHUNK_BYTES = int(PCM_BYTES_PER_SECOND * LIVE_TRANSCRIBE_CHUNK_S)
+LIVE_TRANSCRIBE_FINAL_MIN_S = 0.35
+LIVE_TRANSCRIBE_FINAL_MIN_BYTES = int(PCM_BYTES_PER_SECOND * LIVE_TRANSCRIBE_FINAL_MIN_S)
 
 
 def _get_preview_model():
@@ -56,12 +59,12 @@ def _get_preview_model():
     return _preview_model_cache
 
 
-def _transcribe_preview_pcm(pcm_bytes: bytes) -> str:
+def _transcribe_preview_segments(pcm_bytes: bytes) -> list[str]:
     import os
     import tempfile
 
     if not pcm_bytes:
-        return ""
+        return []
     model = _get_preview_model()
     wav_bytes = pcm16_to_wav(pcm_bytes)
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
@@ -72,10 +75,10 @@ def _transcribe_preview_pcm(pcm_bytes: bytes) -> str:
             path,
             beam_size=1,
             language="en",
-            condition_on_previous_text=True,
+            condition_on_previous_text=False,
             vad_filter=True,
         )
-        return " ".join(s.text.strip() for s in segments).strip()
+        return [s.text.strip() for s in segments if s.text.strip()]
     finally:
         os.unlink(path)
 
@@ -324,6 +327,8 @@ class CompanionManager(QObject):
         self._live_transcription_stop = threading.Event()
         self._live_transcription_thread: Optional[threading.Thread] = None
         self._live_transcription_text = ""
+        self._live_transcription_parts: list[str] = []
+        self._live_transcription_processed_bytes = 0
 
         # Per-app memory: { window_title: [Message, ...] }
         self._app_memory: dict[str, List[Message]] = {}
@@ -538,6 +543,8 @@ class CompanionManager(QObject):
         if self._live_transcription_thread and self._live_transcription_thread.is_alive():
             self._live_transcription_thread.join(timeout=0.2)
         self._live_transcription_text = ""
+        self._live_transcription_parts = []
+        self._live_transcription_processed_bytes = 0
         self._live_transcription_stop = threading.Event()
         self._live_transcription_thread = threading.Thread(
             target=self._live_transcription_worker,
@@ -552,31 +559,50 @@ class CompanionManager(QObject):
         if thread and thread.is_alive():
             thread.join(timeout=0.5)
         self._live_transcription_thread = None
-        if final_pcm and len(final_pcm) >= LIVE_TRANSCRIBE_MIN_BYTES:
+        if final_pcm and len(final_pcm) >= LIVE_TRANSCRIBE_FINAL_MIN_BYTES:
             try:
-                final_text = _transcribe_preview_pcm(final_pcm[-LIVE_TRANSCRIBE_MAX_BYTES:])
+                tail_start = self._live_transcription_processed_bytes
+                tail_pcm = final_pcm[tail_start:]
+                if len(tail_pcm) >= LIVE_TRANSCRIBE_FINAL_MIN_BYTES:
+                    tail_segments = _transcribe_preview_segments(tail_pcm)
+                    if tail_segments:
+                        self._live_transcription_parts.extend(tail_segments)
+                final_text = " ".join(self._live_transcription_parts).strip()
                 if final_text:
                     self._live_transcription_text = final_text
-                    logger.debug("Final live transcription preview: %r", final_text)
+                    logger.info("Final live transcription preview emitted: %r", final_text)
                     self.sig_transcription_text.emit(final_text)
             except Exception as e:
                 logger.debug("Final live transcription preview failed: %s", e)
 
     def _live_transcription_worker(self):
-        last_len = 0
+        consumed_bytes = 0
+        pending_pcm = bytearray()
         while not self._live_transcription_stop.is_set():
             try:
                 pcm = self._listener.snapshot_recording()
-                if len(pcm) < LIVE_TRANSCRIBE_MIN_BYTES or len(pcm) == last_len:
+                if len(pcm) <= consumed_bytes:
                     time.sleep(LIVE_TRANSCRIBE_POLL_S)
                     continue
-                last_len = len(pcm)
-                preview_pcm = pcm[-LIVE_TRANSCRIBE_MAX_BYTES:]
-                text = _transcribe_preview_pcm(preview_pcm)
-                if text and text != self._live_transcription_text:
-                    self._live_transcription_text = text
-                    logger.info("Transcription chunk received: %r", text)
-                    self.sig_transcription_text.emit(text)
+                new_pcm = pcm[consumed_bytes:]
+                consumed_bytes = len(pcm)
+                pending_pcm.extend(new_pcm)
+                logger.info("Audio chunk captured: %s bytes pending=%s", len(new_pcm), len(pending_pcm))
+                while len(pending_pcm) >= LIVE_TRANSCRIBE_CHUNK_BYTES:
+                    chunk_pcm = bytes(pending_pcm[:LIVE_TRANSCRIBE_CHUNK_BYTES])
+                    del pending_pcm[:LIVE_TRANSCRIBE_CHUNK_BYTES]
+                    logger.info("Processing live transcription chunk: %s bytes", len(chunk_pcm))
+                    segments = _transcribe_preview_segments(chunk_pcm)
+                    logger.info("Chunk processed into %s segment(s)", len(segments))
+                    self._live_transcription_processed_bytes += len(chunk_pcm)
+                    if not segments:
+                        continue
+                    self._live_transcription_parts.extend(segments)
+                    text = " ".join(self._live_transcription_parts).strip()
+                    if text and text != self._live_transcription_text:
+                        self._live_transcription_text = text
+                        logger.info("Text emitted to UI: %r", text)
+                        self.sig_transcription_text.emit(text)
             except Exception as e:
                 logger.debug("Live transcription worker error: %s", e)
                 time.sleep(LIVE_TRANSCRIBE_POLL_S)
