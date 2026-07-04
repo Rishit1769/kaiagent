@@ -134,6 +134,26 @@ class RequestHardeningTests(unittest.TestCase):
         self.assertTrue(self.manager._listener.stop_recording_called)
         self.manager._stop_live_transcription.assert_called_once()
 
+    def test_history_for_request_drops_app_memory_for_screenshot_turns(self):
+        self.manager._app_memory["demo"] = [cm.Message(role="user", content="old context")]
+
+        history = self.manager._history_for_request("demo", ["fresh-image"])
+
+        self.assertEqual(history, [])
+        self.assertEqual(len(self.manager._app_memory["demo"]), 1)
+
+    def test_capture_request_screenshot_clears_stale_session_image(self):
+        session = cm.RequestSession(request_id=5, origin="test", started_at=0.0, screenshot="stale")
+        self.manager._active_session = session
+        fresh = mock.Mock(base64_jpeg="new-b64")
+
+        with mock.patch.object(cm, "capture_primary", return_value=fresh):
+            screenshots, images_b64 = self.manager._capture_request_screenshot(session)
+
+        self.assertEqual(screenshots, [fresh])
+        self.assertEqual(images_b64, ["new-b64"])
+        self.assertIs(session.screenshot, fresh)
+
 
 if __name__ == "__main__":
     unittest.main()

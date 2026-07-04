@@ -617,6 +617,23 @@ class CompanionManager(QObject):
         self.sig_overlay_begin_request.emit()
         self._log_session(session, "overlay engaged")
 
+    def _capture_request_screenshot(self, session: RequestSession) -> tuple[list[Any], list[str]]:
+        """Capture a fresh screenshot for this request and clear any stale one."""
+        self._assert_active_session(session)
+        session.screenshot = None
+        shot = capture_primary()
+        if not shot:
+            return [], []
+        session.screenshot = shot
+        return [shot], [shot.base64_jpeg]
+
+    def _history_for_request(self, ak: str, screenshots_b64: list[str]) -> list[Message]:
+        """Prefer the live screenshot over stale per-app visual context."""
+        history = self._app_memory.setdefault(ak, [])
+        if screenshots_b64:
+            return []
+        return history
+
     def _show_detected_point(self, session: RequestSession, x: float, y: float, label: str) -> None:
         self._assert_active_session(session)
         self._engage_overlay(session)
@@ -1163,8 +1180,7 @@ class CompanionManager(QObject):
                 from ai.web_search import build_search_context
                 system += build_search_context(search_results)
 
-            # Use per-app history so context doesn't bleed between apps
-            history = self._app_memory.setdefault(ak, [])
+            history = self._history_for_request(ak, images_b64)
 
             # 5. Stream LLM â€” buffer partial [POINT:...] tags so they never leak
             full_response = ""
@@ -1342,13 +1358,11 @@ class CompanionManager(QObject):
             sensitive = self._privacy_guard and is_sensitive_window(title)
             identity_q = is_identity_question(transcript)
             if sensitive or identity_q:
+                session.screenshot = None
                 screenshots = []
                 images_b64 = []
             else:
-                shot = capture_primary()
-                screenshots = [shot] if shot else []
-                images_b64 = [shot.base64_jpeg] if shot else []
-                session.screenshot = shot
+                screenshots, images_b64 = self._capture_request_screenshot(session)
 
             locate_triggered = is_locate(transcript)
             multistep = is_multistep(transcript)
@@ -1480,7 +1494,7 @@ class CompanionManager(QObject):
                 from ai.web_search import build_search_context
                 system += build_search_context(search_results)
 
-            history = self._app_memory.setdefault(ak, [])
+            history = self._history_for_request(ak, images_b64)
             full_response = ""
             display_buf = ""
             self.sig_response_reset.emit()
@@ -1796,16 +1810,13 @@ class CompanionManager(QObject):
             self._engage_overlay(session)
             self._emit_state(AppState.THINKING)
             self._transition_session(session, "context_ready")
-            shot = capture_primary()
-            screenshots = [shot] if shot else []
-            images_b64 = [shot.base64_jpeg] if shot else []
-            session.screenshot = shot
+            screenshots, images_b64 = self._capture_request_screenshot(session)
             title = active_window_title()
             system = _build_system_prompt(
                 window_title=title, quiz_mode=True,
             )
             ak = app_key(title)
-            history = self._app_memory.setdefault(ak, [])
+            history = self._history_for_request(ak, images_b64)
 
             full = ""
             stream = self._get_llm().stream_response(
